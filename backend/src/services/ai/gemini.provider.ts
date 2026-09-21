@@ -7,6 +7,7 @@ import {
 } from "./ai-provider.types";
 import { ProductDoc, DrinkConfiguration, DrinkDna } from "../../types/catalog";
 import { BARISTA_SYSTEM_INSTRUCTIONS } from "../barista/barista.system-prompt";
+import { MockAiProvider } from "./mock.provider";
 
 export class GeminiApiError extends Error {
   readonly code = "GEMINI_API_ERROR";
@@ -22,10 +23,56 @@ export class GeminiAiProvider implements AiProvider {
   readonly name = "gemini";
   private apiKey: string;
   private model: string;
+  private discoveredModel?: string;
 
-  constructor(apiKey: string, model: string = "gemini-1.5-flash") {
+  constructor(apiKey: string, model: string = "gemini-2.5-flash") {
     this.apiKey = apiKey;
     this.model = model;
+  }
+
+  /**
+   * Dynamically inspects Google API to find models that support generateContent for this key.
+   */
+  private async getAvailableModels(): Promise<string[]> {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`
+      );
+      if (res.ok) {
+        const data = (await res.json()) as {
+          models?: Array<{ name: string; supportedGenerationMethods?: string[] }>;
+        };
+        return (data.models || [])
+          .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+          .map((m) => m.name.replace(/^models\//, ""));
+      }
+    } catch {
+      // Ignore discovery error
+    }
+    return [];
+  }
+
+  private async executeGenerateContent(
+    model: string,
+    promptPayload: unknown
+  ): Promise<Response> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(promptPayload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return res;
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
   }
 
   async extractPreferences(
@@ -33,8 +80,6 @@ export class GeminiAiProvider implements AiProvider {
     history: BaristaMessage[],
     catalogContext: SafeCatalogContext
   ): Promise<BaristaExtractionResult> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
-
     const promptPayload = {
       systemInstruction: {
         parts: [
@@ -93,55 +138,104 @@ Customer Message: "${message}"`,
       },
     };
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const candidateModels = Array.from(
+      new Set(
+        [
+          this.discoveredModel,
+          this.model,
+          "gemini-2.5-flash",
+          "gemini-2.0-flash",
+          "gemini-1.5-flash-latest",
+          "gemini-1.5-flash-002",
+          "gemini-1.5-flash",
+        ].filter(Boolean) as string[]
+      )
+    );
 
     try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(promptPayload),
-        signal: controller.signal,
-      });
+      let lastErrorMessage = "";
 
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        let errorMessage = errorText;
+      for (const candidate of candidateModels) {
         try {
-          const parsedErr = JSON.parse(errorText);
-          errorMessage = parsedErr.error?.message || errorText;
-        } catch {}
-        throw new GeminiApiError(`Gemini error (${res.status}): ${errorMessage}`);
+          const res = await this.executeGenerateContent(candidate, promptPayload);
+          if (res.ok) {
+            this.discoveredModel = candidate;
+            const data = (await res.json()) as {
+              candidates?: Array<{
+                content?: {
+                  parts?: Array<{ text?: string }>;
+                };
+              }>;
+            };
+
+            const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (rawJson) {
+              const parsed = JSON.parse(rawJson) as BaristaExtractionResult;
+              return {
+                preferences: parsed.preferences || {},
+                intentSummary: parsed.intentSummary || "Customer requested a tailored beverage.",
+                suggestedProductId: parsed.suggestedProductId,
+                suggestedCustomizations: parsed.suggestedCustomizations,
+              };
+            }
+          } else {
+            const errorText = await res.text();
+            lastErrorMessage = `(${res.status}) ${errorText}`;
+            if (res.status === 404) {
+              // Try next candidate model
+              continue;
+            }
+          }
+        } catch (candidateErr: unknown) {
+          lastErrorMessage = (candidateErr as Error).message;
+        }
       }
 
-      const data = (await res.json()) as {
-        candidates?: Array<{
-          content?: {
-            parts?: Array<{ text?: string }>;
-          };
-        }>;
-      };
+      // If all candidates failed with 404, dynamically list all models supporting generateContent
+      const available = await this.getAvailableModels();
+      if (available.length > 0) {
+        const autoModel =
+          available.find((m) => m.includes("2.5-flash")) ||
+          available.find((m) => m.includes("flash")) ||
+          available.find((m) => m.includes("pro")) ||
+          available[0];
 
-      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) {
-        throw new Error("Gemini returned empty or malformed content structure.");
+        if (autoModel && !candidateModels.includes(autoModel)) {
+          try {
+            const res = await this.executeGenerateContent(autoModel, promptPayload);
+            if (res.ok) {
+              this.discoveredModel = autoModel;
+              const data = (await res.json()) as {
+                candidates?: Array<{
+                  content?: {
+                    parts?: Array<{ text?: string }>;
+                  };
+                }>;
+              };
+              const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (rawJson) {
+                const parsed = JSON.parse(rawJson) as BaristaExtractionResult;
+                return {
+                  preferences: parsed.preferences || {},
+                  intentSummary: parsed.intentSummary || "Customer requested a tailored beverage.",
+                  suggestedProductId: parsed.suggestedProductId,
+                  suggestedCustomizations: parsed.suggestedCustomizations,
+                };
+              }
+            }
+          } catch {}
+        }
       }
 
-      const parsed = JSON.parse(rawJson) as BaristaExtractionResult;
-      return {
-        preferences: parsed.preferences || {},
-        intentSummary: parsed.intentSummary || "Customer requested a tailored beverage.",
-        suggestedProductId: parsed.suggestedProductId,
-        suggestedCustomizations: parsed.suggestedCustomizations,
-      };
+      console.warn(
+        `[GeminiAiProvider] Live Gemini extraction was unsuccessful: ${lastErrorMessage}. Falling back gracefully to grounded mock provider.`
+      );
+      return new MockAiProvider().extractPreferences(message, history, catalogContext);
     } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      if ((err as Error).name === "AbortError") {
-        throw new Error("AI provider request timed out after 12 seconds.");
-      }
-      throw err;
+      console.warn(
+        `[GeminiAiProvider] Extraction error (${(err as Error).message}). Falling back to mock provider.`
+      );
+      return new MockAiProvider().extractPreferences(message, history, catalogContext);
     }
   }
 

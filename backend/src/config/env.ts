@@ -21,7 +21,7 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => (val ? val.trim().replace(/^["']|["']$/g, "") : undefined)),
-  AI_MODEL: z.string().default("gemini-1.5-flash"),
+  AI_MODEL: z.string().default("gemini-2.5-flash"),
 });
 
 const parsed = envSchema.safeParse(process.env);
