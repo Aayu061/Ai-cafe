@@ -1,4 +1,5 @@
 import { auth } from "@/lib/firebase/auth";
+import { BaristaRecommendResponse } from "@/types/barista";
 
 /**
  * Frontend API Client Helper
@@ -16,6 +17,7 @@ export interface ApiResponse<T = unknown> {
     code: string;
     message: string;
     details?: unknown;
+    retryAfterSeconds?: number;
   };
 }
 
@@ -59,3 +61,28 @@ export async function apiFetch<T = unknown>(
     };
   }
 }
+
+/**
+ * AI Barista Recommendation API
+ * Sends natural language drink request with conversation context to server.
+ */
+export async function recommendDrink(
+  message: string,
+  conversation: Array<{ role: "user" | "assistant"; content: string }> = []
+): Promise<BaristaRecommendResponse> {
+  const payload = {
+    message,
+    conversation: conversation.slice(-6).map((m) => ({
+      role: m.role,
+      content: m.content,
+    })),
+  };
+
+  const response = await apiFetch<BaristaRecommendResponse>("/api/barista/recommend", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  return response as unknown as BaristaRecommendResponse;
+}
+

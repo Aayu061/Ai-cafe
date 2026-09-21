@@ -5,6 +5,7 @@ import { Container } from "@/components/layout/container";
 import { Button } from "@/components/ui/button";
 import { Sparkles, MessageSquare, Send, ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface BaristaPreset {
@@ -42,6 +43,7 @@ const PRESETS: BaristaPreset[] = [
 ];
 
 export function BaristaTeaser() {
+  const router = useRouter();
   const [selectedPresetIndex, setSelectedPresetIndex] = useState(0);
   const [inputVal, setInputVal] = useState("");
   const currentPreset = PRESETS[selectedPresetIndex];
@@ -49,8 +51,7 @@ export function BaristaTeaser() {
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputVal.trim()) return;
-    // For Phase 1 demonstration, acknowledge input
-    setSelectedPresetIndex(0);
+    router.push(`/barista?prompt=${encodeURIComponent(inputVal.trim())}`);
   };
 
   return (
@@ -97,12 +98,20 @@ export function BaristaTeaser() {
               </div>
             </div>
 
-            <Link href="#build">
-              <Button variant="primary" size="lg" className="gap-2">
-                <span>Try Drink Builder</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link href="/barista">
+                <Button variant="primary" size="lg" className="gap-2 shadow-soft">
+                  <Sparkles className="w-4 h-4 text-caramel" />
+                  <span>Launch AI Barista Console</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <Link href="/builder">
+                <Button variant="outline" size="lg" className="border-espresso/15 hover:bg-espresso/5">
+                  <span>Drink Studio</span>
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {/* Right Column: Interactive Consultation Card */}
@@ -186,9 +195,10 @@ export function BaristaTeaser() {
                       ))}
                     </div>
 
-                    <Link href="/builder">
-                      <Button variant="accent" size="sm" className="w-full justify-center">
-                        Customize In Drink Studio
+                    <Link href={`/barista?prompt=${encodeURIComponent(currentPreset.prompt)}`}>
+                      <Button variant="accent" size="sm" className="w-full justify-center gap-1.5 shadow-xs">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Consult AI Barista With This Prompt</span>
                       </Button>
                     </Link>
                   </div>

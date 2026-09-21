@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { env } from "../config/env";
 import { FirebaseAdminNotConfiguredError } from "../config/firebase-admin";
+import { AiBaristaNotConfiguredError } from "../services/ai/ai-provider";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -17,6 +18,18 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   const isProduction = env.NODE_ENV === "production";
+
+  // Handle AI Barista provider not configured
+  if (err instanceof AiBaristaNotConfiguredError) {
+    res.status(503).json({
+      success: false,
+      error: {
+        code: "AI_BARISTA_NOT_CONFIGURED",
+        message: err.message,
+      },
+    });
+    return;
+  }
 
   // Handle Firebase Admin not configured
   if (err instanceof FirebaseAdminNotConfiguredError) {

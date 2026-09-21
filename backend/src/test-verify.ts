@@ -138,6 +138,81 @@ async function runTests() {
     return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
   });
 
+  // 11. POST /api/barista/recommend with missing message -> 400 VALIDATION_ERROR
+  await check("11. POST /api/barista/recommend rejects empty payload with 400", async () => {
+    const res = await fetch(`${baseUrl}/api/barista/recommend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = (await res.json()) as { success: boolean; error?: { code: string } };
+    const ok = res.status === 400 && body.error?.code === "VALIDATION_ERROR";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 12. POST /api/barista/recommend returns valid structured recommendation or 503 if unconfigured
+  await check("12. POST /api/barista/recommend processes natural language drink request", async () => {
+    const res = await fetch(`${baseUrl}/api/barista/recommend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "I need an icy chocolate drink that is not too sweet for late afternoon focus",
+      }),
+    });
+    const body = (await res.json()) as {
+      success: boolean;
+      message?: string;
+      preferences?: Record<string, unknown>;
+      recommendations?: Array<{
+        product: { id: string; name: string };
+        pricing: { basePrice: number; finalPrice: number };
+        reason: string;
+      }>;
+      error?: { code: string; message: string };
+    };
+
+    if (res.status === 503 && body.error?.code === "AI_BARISTA_NOT_CONFIGURED") {
+      return { ok: true, details: "Status: 503 AI_BARISTA_NOT_CONFIGURED (Provider unconfigured in env)" };
+    }
+
+    const hasRecommendations =
+      res.status === 200 &&
+      body.success === true &&
+      Array.isArray(body.recommendations) &&
+      body.recommendations.length > 0 &&
+      (body.recommendations[0].pricing?.finalPrice ?? 0) > 0;
+
+    return {
+      ok: hasRecommendations,
+      details: `Status: ${res.status}, Count: ${body.recommendations?.length || 0}, Top drink: ${
+        body.recommendations?.[0]?.product?.name || "none"
+      } (₹${body.recommendations?.[0]?.pricing?.finalPrice || 0})`,
+    };
+  });
+
+  // 13. Rate limiter protection on POST /api/barista/recommend
+  await check("13. POST /api/barista/recommend triggers 429 when rate limit exceeded", async () => {
+    let rateLimited = false;
+    let statusCode = 0;
+    // We already made 2 requests in tests 11 & 12; fire up to 10 more rapidly to exceed 10 req/min
+    for (let i = 0; i < 11; i++) {
+      const res = await fetch(`${baseUrl}/api/barista/recommend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "quick check" }),
+      });
+      if (res.status === 429) {
+        rateLimited = true;
+        statusCode = 429;
+        break;
+      }
+    }
+    return {
+      ok: rateLimited,
+      details: `Rate limited: ${rateLimited} (Status: ${statusCode})`,
+    };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {

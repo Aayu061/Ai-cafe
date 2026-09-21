@@ -13,11 +13,11 @@ export const BRAND = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Home", href: "#hero" },
-  { label: "Menu", href: "#menu" },
-  { label: "AI Barista", href: "#ai-barista", badge: "Smart" },
-  { label: "Build Your Drink", href: "#build" },
-  { label: "Our Story", href: "#story" },
+  { label: "Home", href: "/#hero" },
+  { label: "Menu", href: "/#menu" },
+  { label: "AI Barista", href: "/barista", badge: "AI" },
+  { label: "Build Your Drink", href: "/builder" },
+  { label: "Our Story", href: "/#story" },
 ];
 
 export const APPROVED_DRINKS: DrinkItem[] = [

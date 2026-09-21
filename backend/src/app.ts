@@ -7,6 +7,7 @@ import { notFoundHandler } from "./middleware/not-found.middleware";
 import { healthRoutes } from "./routes/health.routes";
 import { userRoutes } from "./routes/user.routes";
 import { catalogRoutes } from "./routes/catalog.routes";
+import { baristaRoutes } from "./routes/barista.routes";
 
 export function createApp(): Express {
   const app = express();
@@ -44,6 +45,7 @@ export function createApp(): Express {
   app.use(["/health", "/health%20", "/health "], healthRoutes);
   app.use("/api", userRoutes);
   app.use("/api", catalogRoutes);
+  app.use("/api/barista", baristaRoutes);
 
   // 5. 404 & Centralized Error Handlers
   app.use(notFoundHandler);

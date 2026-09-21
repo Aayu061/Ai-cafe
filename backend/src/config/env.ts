@@ -14,6 +14,11 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional(),
+
+  // AI Provider Configuration (Server-Side Only)
+  AI_PROVIDER: z.enum(["gemini", "mock"]).default("gemini"),
+  AI_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default("gemini-1.5-flash"),
 });
 
 const parsed = envSchema.safeParse(process.env);

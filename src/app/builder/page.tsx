@@ -104,16 +104,29 @@ const TOPPINGS: OptionItem[] = [
 function BuilderContent() {
   const searchParams = useSearchParams();
   const initialProductParam = searchParams.get("product") || "caramel-cold-brew";
+  const initialBaseParam = searchParams.get("base");
+  const initialMilkParam = searchParams.get("milk");
+  const initialFlavorParam = searchParams.get("flavor");
+  const initialSweetnessParam = searchParams.get("sweetness");
+  const initialIceParam = searchParams.get("ice");
+  const initialSizeParam = searchParams.get("size");
+  const initialToppingsParam = searchParams.get("toppings");
+  const isFromBarista = searchParams.get("from") === "barista";
 
   // Active Drink Configuration State
   const [selectedProductId, setSelectedProductId] = useState<string>(initialProductParam);
-  const [selectedBase, setSelectedBase] = useState<string>("cold-brew");
-  const [selectedSize, setSelectedSize] = useState<string>("medium");
-  const [selectedMilk, setSelectedMilk] = useState<string>("oat-milk");
-  const [selectedFlavor, setSelectedFlavor] = useState<string>("caramel");
-  const [selectedSweetness, setSelectedSweetness] = useState<string>("sweetness-50");
-  const [selectedIce, setSelectedIce] = useState<string>("regular-ice");
-  const [selectedToppings, setSelectedToppings] = useState<string[]>(["caramel-drizzle"]);
+  const [selectedBase, setSelectedBase] = useState<string>(initialBaseParam || "cold-brew");
+  const [selectedSize, setSelectedSize] = useState<string>(initialSizeParam || "medium");
+  const [selectedMilk, setSelectedMilk] = useState<string>(initialMilkParam || "oat-milk");
+  const [selectedFlavor, setSelectedFlavor] = useState<string>(initialFlavorParam || "caramel");
+  const [selectedSweetness, setSelectedSweetness] = useState<string>(initialSweetnessParam || "sweetness-50");
+  const [selectedIce, setSelectedIce] = useState<string>(initialIceParam || "regular-ice");
+  const [selectedToppings, setSelectedToppings] = useState<string[]>(
+    initialToppingsParam !== null
+      ? initialToppingsParam.split(",").filter(Boolean)
+      : ["caramel-drizzle"]
+  );
+  const [fromBarista, setFromBarista] = useState<boolean>(isFromBarista);
 
   // Server Validation State
   const [isValidating, setIsValidating] = useState<boolean>(false);
@@ -223,11 +236,12 @@ function BuilderContent() {
         body: JSON.stringify(payload),
       });
 
-      if (res.success && res.data) {
-        setServerPrice(res.data.finalPrice);
-        setCustomizationTotal(res.data.customizationTotal);
-        if (res.data.drinkDna) {
-          setDrinkDna(res.data.drinkDna);
+      const dataObj = (res.data || res) as any;
+      if (res.success && typeof dataObj.finalPrice === "number") {
+        setServerPrice(dataObj.finalPrice);
+        setCustomizationTotal(dataObj.customizationTotal ?? 0);
+        if (dataObj.drinkDna) {
+          setDrinkDna(dataObj.drinkDna);
         }
       } else {
         // Validation rejection or offline fallback
@@ -303,6 +317,39 @@ function BuilderContent() {
               Choose your base, milk, flavor, and toppings. Prices and Drink DNA™ profile are calibrated authoritatively on the AI Café server.
             </p>
           </div>
+
+          {/* AI Barista Recommendation Active Banner */}
+          {fromBarista && (
+            <div className="mb-8 rounded-3xl bg-gradient-to-r from-caramel/20 via-amber-50 to-cream border border-caramel/40 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-soft">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-full bg-espresso text-cream flex items-center justify-center shrink-0 shadow-xs">
+                  <Sparkles className="w-5 h-5 text-caramel fill-caramel" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-caramel-dark flex items-center gap-1.5">
+                    <span>✨</span> AI Barista Recipe Applied
+                  </p>
+                  <p className="text-xs sm:text-sm text-espresso/80 font-medium mt-0.5">
+                    Recipe loaded for <strong className="text-espresso font-semibold">{currentProduct.name}</strong> from your consultation. Customize further below or reset anytime.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFromBarista(false);
+                    handleSelectPresetProduct(selectedProductId);
+                  }}
+                  className="text-xs border-espresso/20 hover:bg-espresso/5 gap-1.5 bg-white/80"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-warmgray" />
+                  <span>Reset to Standard Recipe</span>
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Preset Product Selector Ribbon */}
           <div className="mb-10 pb-4 border-b border-espresso/10">
