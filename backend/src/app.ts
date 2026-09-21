@@ -41,7 +41,7 @@ export function createApp(): Express {
   app.use(requestLogger);
 
   // 4. Mount Routes
-  app.use("/health", healthRoutes);
+  app.use(["/health", "/health%20", "/health "], healthRoutes);
   app.use("/api", userRoutes);
   app.use("/api", catalogRoutes);
 
