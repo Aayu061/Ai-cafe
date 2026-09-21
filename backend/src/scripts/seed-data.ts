@@ -10,7 +10,7 @@ export const INITIAL_PRODUCTS: ProductDoc[] = [
     description: "Slow-steeped cold brew layered with handcrafted caramel and velvet sweet cream.",
     basePrice: 180,
     currency: "INR",
-    image: "/asset/caramel-cold-brew/frame_0001.webp",
+    image: "/asset/caramel-cold-brew/frame-0001.webp",
     available: true,
     featured: true,
     tags: ["Signature", "Cold Brew", "Bestseller"],

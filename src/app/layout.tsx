@@ -36,7 +36,7 @@ export default function RootLayout({
       <head>
         <link
           rel="preload"
-          href="/asset/caramel-cold-brew/frame_0001.webp"
+          href="/asset/caramel-cold-brew/frame-0001.webp"
           as="image"
           type="image/webp"
           fetchPriority="high"

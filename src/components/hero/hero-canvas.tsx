@@ -147,23 +147,23 @@ export function HeroCanvas() {
       {/* Instant Poster Image: Preloaded in <head>, renders immediately on first HTML paint */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/asset/caramel-cold-brew/frame_0001.webp"
+        src="/asset/caramel-cold-brew/frame-0001.webp"
         alt="AI Café Cold Brew Experience"
         fetchPriority="high"
-        decoding="async"
-        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+        loading="eager"
+        decoding="sync"
+        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-0"
         style={{
           width: "100%",
           height: "100%",
-          display: firstFrameLoaded ? "none" : "block",
         }}
       />
 
       {/* HTML5 Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
-        style={{ width: "100%", height: "100%" }}
+        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-10 transition-opacity duration-300"
+        style={{ width: "100%", height: "100%", opacity: firstFrameLoaded ? 1 : 0 }}
       />
 
       {/* Cinematic Vignette & Ambient Gradient Overlays */}
