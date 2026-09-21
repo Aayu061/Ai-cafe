@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Next.js build output & Backend output
+/.next/
+/out/
+dist/
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment files (NEVER COMMIT CREDENTIALS)
+.env
+.env.local
+.env*.local
+env.local
+enc.local
+*.env
+*.local
+
+# Media recordings & archive temp
+*.mp4
+*.zip
+assest/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+

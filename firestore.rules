@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function: Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function: Check if user is accessing their own document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users Collection: Users can read and write only their own document
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Products & Ingredients: Publicly readable by all, writable only by server/admin
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK can modify catalog
+    }
+
+    match /ingredients/{ingredientId} {
+      allow read: if true;
+      allow write: if false; // Only Admin SDK can modify ingredients
+    }
+
+    // Carts: Only the owner can read/write their cart
+    match /carts/{cartId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Orders: Users can view their own orders; creation is validated
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false; // Order state updates managed via server
+    }
+
+    // Reviews: Publicly readable; only author can create
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Favorites: Only the owner can access/manage their favorites
+    match /favorites/{favoriteId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
