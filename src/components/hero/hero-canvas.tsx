@@ -108,15 +108,6 @@ export function HeroCanvas() {
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    // Animation frame render loop
-    const tick = () => {
-      if (currentFrameIndexRef.current !== targetFrameIndexRef.current) {
-        renderFrame(targetFrameIndexRef.current);
-      }
-      rafIdRef.current = requestAnimationFrame(tick);
-    };
-    rafIdRef.current = requestAnimationFrame(tick);
-
     const trigger = ScrollTrigger.create({
       trigger: container,
       start: "top top",
@@ -132,6 +123,10 @@ export function HeroCanvas() {
           Math.max(0, Math.floor(progress * TOTAL_HERO_FRAMES))
         );
         targetFrameIndexRef.current = frameIndex;
+        if (currentFrameIndexRef.current !== frameIndex) {
+          if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = requestAnimationFrame(() => renderFrame(frameIndex));
+        }
       },
     });
 
@@ -149,6 +144,21 @@ export function HeroCanvas() {
       ref={containerRef}
       className="relative w-full h-screen overflow-hidden bg-[#120905]"
     >
+      {/* Instant Poster Image: Preloaded in <head>, renders immediately on first HTML paint */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/asset/caramel-cold-brew/frame_0001.webp"
+        alt="AI Café Cold Brew Experience"
+        fetchPriority="high"
+        decoding="async"
+        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
+        style={{
+          width: "100%",
+          height: "100%",
+          display: firstFrameLoaded ? "none" : "block",
+        }}
+      />
+
       {/* HTML5 Canvas */}
       <canvas
         ref={canvasRef}

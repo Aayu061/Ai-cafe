@@ -33,6 +33,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+      <head>
+        <link
+          rel="preload"
+          href="/asset/caramel-cold-brew/frame_0001.webp"
+          as="image"
+          type="image/webp"
+          fetchPriority="high"
+        />
+      </head>
       <body className="font-sans bg-cream text-espresso antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
