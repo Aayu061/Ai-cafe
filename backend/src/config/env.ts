@@ -17,7 +17,10 @@ const envSchema = z.object({
 
   // AI Provider Configuration (Server-Side Only)
   AI_PROVIDER: z.enum(["gemini", "mock"]).default("gemini"),
-  AI_API_KEY: z.string().optional(),
+  AI_API_KEY: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.trim().replace(/^["']|["']$/g, "") : undefined)),
   AI_MODEL: z.string().default("gemini-1.5-flash"),
 });
 

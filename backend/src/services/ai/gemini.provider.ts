@@ -8,6 +8,16 @@ import {
 import { ProductDoc, DrinkConfiguration, DrinkDna } from "../../types/catalog";
 import { BARISTA_SYSTEM_INSTRUCTIONS } from "../barista/barista.system-prompt";
 
+export class GeminiApiError extends Error {
+  readonly code = "GEMINI_API_ERROR";
+  readonly statusCode = 502;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiApiError";
+  }
+}
+
 export class GeminiAiProvider implements AiProvider {
   readonly name = "gemini";
   private apiKey: string;
@@ -98,7 +108,12 @@ Customer Message: "${message}"`,
 
       if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Gemini API returned status ${res.status}: ${errorText}`);
+        let errorMessage = errorText;
+        try {
+          const parsedErr = JSON.parse(errorText);
+          errorMessage = parsedErr.error?.message || errorText;
+        } catch {}
+        throw new GeminiApiError(`Gemini error (${res.status}): ${errorMessage}`);
       }
 
       const data = (await res.json()) as {

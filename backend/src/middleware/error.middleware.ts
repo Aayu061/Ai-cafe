@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { env } from "../config/env";
 import { FirebaseAdminNotConfiguredError } from "../config/firebase-admin";
 import { AiBaristaNotConfiguredError } from "../services/ai/ai-provider";
+import { GeminiApiError } from "../services/ai/gemini.provider";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -25,6 +26,18 @@ export function errorHandler(
       success: false,
       error: {
         code: "AI_BARISTA_NOT_CONFIGURED",
+        message: err.message,
+      },
+    });
+    return;
+  }
+
+  // Handle Gemini Provider errors
+  if (err instanceof GeminiApiError) {
+    res.status(502).json({
+      success: false,
+      error: {
+        code: "GEMINI_API_ERROR",
         message: err.message,
       },
     });
