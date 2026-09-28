@@ -1,5 +1,4 @@
-import type { DecodedIdToken } from "firebase-admin/auth";
-import type { UserRole, UserStatus } from "./roles";
+import type { UserRole, UserStatus, AccountDomain } from "./roles";
 
 export interface AuthenticatedUser {
   uid: string;
@@ -7,9 +6,11 @@ export interface AuthenticatedUser {
   email_verified?: boolean;
   name?: string;
   picture?: string;
+  accountDomain: AccountDomain;
   role: UserRole;
   status: UserStatus;
   permissions?: string[];
+  employeeId?: string;
   claims?: DecodedIdToken;
 }
 

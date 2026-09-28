@@ -2,6 +2,7 @@ process.env.NODE_ENV = "test";
 
 import http from "http";
 import { app } from "./app";
+import { accountResolutionService } from "./services/account-resolution.service";
 
 /**
  * AI CAFÉ Backend Endpoint Verification Script
@@ -628,6 +629,286 @@ async function runTests() {
       ok,
       details: `Status: ${res.status}, Active Products: ${body.analytics?.activeProductsCount}, Inventory: ${body.analytics?.totalInventoryItems}, Has Orders: ${body.analytics?.hasOrderHistory}`,
     };
+  });
+
+  // ============================================================
+  // PHASE 7.1 — SEPARATE AUTHENTICATION EXPERIENCES & DOMAINS
+  // ============================================================
+
+  // 41. Account Domain: Resolve Super Admin from superAdminAccounts
+  await check("41. Account Domain: Resolves Super Admin identity from superAdminAccounts", async () => {
+    const account = await accountResolutionService.resolveAccount("test-super-admin-uid");
+    const ok =
+      account !== null &&
+      account.accountDomain === "super_admin" &&
+      account.role === "super_admin" &&
+      account.status === "active";
+    return { ok, details: `Resolved: ${account?.accountDomain}, Role: ${account?.role}, Status: ${account?.status}` };
+  });
+
+  // 42. Account Domain: Resolve Admin from adminAccounts with employeeId
+  await check("42. Account Domain: Resolves Admin identity from adminAccounts with employeeId", async () => {
+    const account = await accountResolutionService.resolveAccount("test-admin-uid");
+    const ok =
+      account !== null &&
+      account.accountDomain === "admin" &&
+      account.role === "admin" &&
+      account.employeeId === "ADM-1001";
+    return { ok, details: `Resolved: ${account?.accountDomain}, EmpId: ${account?.employeeId}, Role: ${account?.role}` };
+  });
+
+  // 43. Account Domain: Resolve Staff from staffAccounts with employeeId
+  await check("43. Account Domain: Resolves Staff identity from staffAccounts with employeeId", async () => {
+    const account = await accountResolutionService.resolveAccount("test-staff-uid");
+    const ok =
+      account !== null &&
+      account.accountDomain === "staff" &&
+      account.role === "staff" &&
+      account.employeeId === "STF-2041";
+    return { ok, details: `Resolved: ${account?.accountDomain}, EmpId: ${account?.employeeId}, Role: ${account?.role}` };
+  });
+
+  // 44. Account Domain: Resolve Customer from users collection
+  await check("44. Account Domain: Resolves Customer identity from users collection", async () => {
+    const account = await accountResolutionService.resolveAccount("test-customer-uid");
+    const ok =
+      account !== null &&
+      account.accountDomain === "customer" &&
+      account.role === "customer";
+    return { ok, details: `Resolved: ${account?.accountDomain}, Role: ${account?.role}` };
+  });
+
+  // 45. Super Admin Endpoint: GET /api/super-admin/overview returns 200 with domain telemetry
+  await check("45. Super Admin: GET /api/super-admin/overview returns 200 with domain telemetry", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/overview`, {
+      headers: { Authorization: "Bearer test-token-super_admin" },
+    });
+    const body = (await res.json()) as { success: boolean; domains: { superAdmins: number; admins: number; staff: number; customers: number } };
+    const ok = res.status === 200 && body.success === true && body.domains?.superAdmins >= 1;
+    return { ok, details: `Status: ${res.status}, SuperAdmins: ${body.domains?.superAdmins}, Admins: ${body.domains?.admins}, Staff: ${body.domains?.staff}` };
+  });
+
+  // 46. Cross-Domain Isolation: Admin cannot access /api/super-admin/overview (403)
+  await check("46. Cross-Domain Isolation: Admin cannot access /api/super-admin/overview (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/overview`, {
+      headers: { Authorization: "Bearer test-token-admin" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 47. Cross-Domain Isolation: Staff cannot access /api/super-admin/overview (403)
+  await check("47. Cross-Domain Isolation: Staff cannot access /api/super-admin/overview (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/overview`, {
+      headers: { Authorization: "Bearer test-token-staff" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 48. Cross-Domain Isolation: Customer cannot access /api/super-admin/overview (403)
+  await check("48. Cross-Domain Isolation: Customer cannot access /api/super-admin/overview (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/overview`, {
+      headers: { Authorization: "Bearer test-token-customer" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 49. Super Admin: GET /api/super-admin/admins returns administrators
+  await check("49. Super Admin: GET /api/super-admin/admins returns active administrators", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/admins`, {
+      headers: { Authorization: "Bearer test-token-super_admin" },
+    });
+    const body = (await res.json()) as { success: boolean; admins: Array<{ uid: string; email: string; role: string }> };
+    const ok = res.status === 200 && body.success === true && Array.isArray(body.admins) && body.admins.length > 0;
+    return { ok, details: `Status: ${res.status}, Admins Count: ${body.admins?.length}, Sample: ${body.admins?.[0]?.email}` };
+  });
+
+  // 50. Super Admin: POST /api/super-admin/admins provisions new administrator
+  let createdAdminUid = "";
+  await check("50. Super Admin: POST /api/super-admin/admins provisions new administrator account", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/admins`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-super_admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "operations-lead@aicafe.internal",
+        displayName: "Operations Director",
+        employeeId: "ADM-2005",
+        permissions: ["manage_catalog", "manage_inventory", "manage_staff"],
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; admin: { uid: string; email: string; role: string; employeeId?: string } };
+    const ok = res.status === 201 && body.success === true && body.admin?.role === "admin";
+    if (body.admin?.uid) createdAdminUid = body.admin.uid;
+    return { ok, details: `Status: ${res.status}, UID: ${body.admin?.uid}, Role: ${body.admin?.role}, EmpId: ${body.admin?.employeeId}` };
+  });
+
+  // 51. Super Admin Defense: Admin cannot provision administrators (403)
+  await check("51. Privilege Defense: Admin cannot provision administrators (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/admins`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "rogue-admin@aicafe.internal",
+        displayName: "Rogue Admin",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 52. Super Admin: PATCH /api/super-admin/admins/:uid/status suspends admin
+  await check("52. Super Admin: PATCH /api/super-admin/admins/:uid/status suspends administrator", async () => {
+    const targetUid = createdAdminUid || "test-admin-uid";
+    const res = await fetch(`${baseUrl}/api/super-admin/admins/${targetUid}/status`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer test-token-super_admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "suspended" }),
+    });
+    const body = (await res.json()) as { success: boolean; admin: { uid: string; status: string } };
+    const ok = res.status === 200 && body.success === true && body.admin?.status === "suspended";
+    return { ok, details: `Status: ${res.status}, Admin: ${body.admin?.uid}, New Status: ${body.admin?.status}` };
+  });
+
+  // 53. Suspended Admin Enforcement: Suspended admin is rejected from operational endpoints
+  await check("53. Suspended Admin Enforcement: Suspended admin rejected from /api/admin/products (403 ACCOUNT_SUSPENDED)", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/products`, {
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "x-test-status": "suspended",
+      },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "ACCOUNT_SUSPENDED";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 54. Super Admin: Reactivate suspended administrator
+  await check("54. Super Admin: PATCH /api/super-admin/admins/:uid/status reactivates administrator", async () => {
+    const targetUid = createdAdminUid || "test-admin-uid";
+    const res = await fetch(`${baseUrl}/api/super-admin/admins/${targetUid}/status`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer test-token-super_admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "active" }),
+    });
+    const body = (await res.json()) as { success: boolean; admin: { uid: string; status: string } };
+    const ok = res.status === 200 && body.success === true && body.admin?.status === "active";
+    return { ok, details: `Status: ${res.status}, Admin: ${body.admin?.uid}, Restored Status: ${body.admin?.status}` };
+  });
+
+  // 55. Staff Management: Admin provisions staff member via POST /api/admin/staff
+  let createdStaffUid = "";
+  await check("55. Staff Management: Admin provisions staff member via POST /api/admin/staff", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/staff`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "shift-barista@aicafe.internal",
+        displayName: "Shift Barista",
+        employeeId: "STF-3001",
+        permissions: ["view_orders", "update_order_status"],
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; staff: { uid: string; email: string; role: string; employeeId?: string } };
+    const ok = res.status === 201 && body.success === true && body.staff?.role === "staff";
+    if (body.staff?.uid) createdStaffUid = body.staff.uid;
+    return { ok, details: `Status: ${res.status}, UID: ${body.staff?.uid}, Role: ${body.staff?.role}, EmpId: ${body.staff?.employeeId}` };
+  });
+
+  // 56. Self-Promotion Defense: Admin cannot provision super_admin via POST /api/admin/staff (403)
+  await check("56. Privilege Escalation Defense: Admin cannot provision super_admin via staff API (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/staff`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "escalation@aicafe.internal",
+        displayName: "Escalated Super Admin",
+        role: "super_admin",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 57. Staff Management Defense: Staff member cannot provision other staff (403)
+  await check("57. Privilege Defense: Staff member cannot access POST /api/admin/staff (403 FORBIDDEN)", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/staff`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-staff",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: "staff-friend@aicafe.internal",
+        displayName: "Staff Friend",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 58. Staff Status Lifecycle: Admin can suspend staff member via PATCH /api/admin/staff/:id/status
+  await check("58. Staff Lifecycle: Admin suspends staff member via PATCH /api/admin/staff/:id/status", async () => {
+    const targetUid = createdStaffUid || "test-staff-uid";
+    const res = await fetch(`${baseUrl}/api/admin/staff/${targetUid}/status`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status: "suspended" }),
+    });
+    const body = (await res.json()) as { success: boolean; staff: { uid: string; status: string } };
+    const ok = res.status === 200 && body.success === true && body.staff?.status === "suspended";
+    return { ok, details: `Status: ${res.status}, Staff: ${body.staff?.uid}, New Status: ${body.staff?.status}` };
+  });
+
+  // 59. Suspended Staff Enforcement: Suspended staff is rejected from staff orders queue
+  await check("59. Suspended Staff Enforcement: Suspended staff rejected from /api/staff/orders (403 ACCOUNT_SUSPENDED)", async () => {
+    const res = await fetch(`${baseUrl}/api/staff/orders`, {
+      headers: {
+        Authorization: "Bearer test-token-staff",
+        "x-test-status": "suspended",
+      },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "ACCOUNT_SUSPENDED";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 60. Root System Health: Super Admin GET /api/super-admin/system-health returns health status
+  await check("60. Root System Health: Super Admin GET /api/super-admin/system-health returns 200 operational", async () => {
+    const res = await fetch(`${baseUrl}/api/super-admin/system-health`, {
+      headers: { Authorization: "Bearer test-token-super_admin" },
+    });
+    const body = (await res.json()) as { success: boolean; status: string; environment: string };
+    const ok = res.status === 200 && body.success === true && body.status === "operational";
+    return { ok, details: `Status: ${res.status}, System Status: ${body.status}, Env: ${body.environment}` };
   });
 
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);

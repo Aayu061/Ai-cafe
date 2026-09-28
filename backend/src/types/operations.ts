@@ -53,7 +53,7 @@ export interface Recipe {
   updatedAt: string;
 }
 
-export type AuditResourceType = "product" | "inventory" | "order" | "staff" | "customer" | "system";
+export type AuditResourceType = "product" | "inventory" | "order" | "staff" | "customer" | "system" | "admin" | "super_admin";
 
 export interface AuditLog {
   id: string;

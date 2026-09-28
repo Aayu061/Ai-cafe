@@ -12,7 +12,7 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Users Collection: Users can read and update only their own document.
+    // Users Collection (Customers): Users can read and update only their own document.
     // Self-promotion defense: Clients CANNOT alter role, status, or permissions.
     match /users/{userId} {
       allow read: if isOwner(userId);
@@ -23,6 +23,27 @@ service cloud.firestore {
       allow update: if isOwner(userId) 
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'permissions']);
       allow delete: if false; // Account deletion handled via backend/Admin SDK
+    }
+
+    // Staff Accounts Collection: Read allowed by the account owner.
+    // Writes are strictly controlled via authorized server APIs / Admin SDK.
+    match /staffAccounts/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Admin Accounts Collection: Read allowed by the account owner.
+    // Writes are strictly controlled via authorized server APIs / Admin SDK.
+    match /adminAccounts/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Super Admin Accounts Collection: Read allowed by the account owner.
+    // Writes are strictly controlled via authorized server APIs / Admin SDK.
+    match /superAdminAccounts/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
     }
 
     // Products & Ingredients: Publicly readable by all, writable only by server/admin

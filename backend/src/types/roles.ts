@@ -71,6 +71,78 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
   ],
 };
 
+export type AccountDomain = "customer" | "staff" | "admin" | "super_admin";
+
+export interface CustomerAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string | null;
+  role: "customer";
+  status: UserStatus;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+  tasteProfile?: Record<string, unknown>;
+  favorites?: string[];
+  savedCreations?: string[];
+  preferences?: {
+    favoriteBases?: string[];
+    preferredMilk?: string;
+    sweetnessPreference?: number;
+  };
+}
+
+export interface StaffAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  employeeId: string;
+  role: "staff";
+  status: UserStatus;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface AdminAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  employeeId?: string;
+  role: "admin";
+  status: UserStatus;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface SuperAdminAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: "super_admin";
+  status: UserStatus;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface ResolvedAccount {
+  uid: string;
+  accountDomain: AccountDomain;
+  role: UserRole;
+  status: UserStatus;
+  permissions: string[];
+  email: string;
+  displayName: string;
+  employeeId?: string;
+  photoURL?: string | null;
+}
+
 export interface UserDocument {
   uid: string;
   email: string;
@@ -79,9 +151,11 @@ export interface UserDocument {
   role: UserRole;
   status: UserStatus;
   permissions?: string[];
+  accountDomain?: AccountDomain;
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  employeeId?: string;
   tasteProfile?: Record<string, unknown>;
   favorites?: string[];
   savedCreations?: string[];

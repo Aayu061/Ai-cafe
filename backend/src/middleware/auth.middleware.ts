@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { getFirebaseAdminAuth, FirebaseAdminNotConfiguredError } from "../config/firebase-admin";
 import type { AuthenticatedUser } from "../types/express";
-import { UserRole, UserStatus, ROLE_PERMISSIONS } from "../types/roles";
-import { userService } from "../services/user.service";
+import { UserRole, UserStatus, AccountDomain, ROLE_PERMISSIONS } from "../types/roles";
+import { accountResolutionService } from "../services/account-resolution.service";
 
 export async function requireAuth(
   req: Request,
@@ -43,6 +43,7 @@ export async function requireAuth(
     const testRole = (req.headers["x-test-role"] as UserRole) || (token.replace("test-token-", "") as UserRole);
     const testStatus = (req.headers["x-test-status"] as UserStatus) || "active";
     const testUid = (req.headers["x-test-uid"] as string) || `test-${testRole}-uid`;
+    const testDomain: AccountDomain = (req.headers["x-test-domain"] as AccountDomain) || testRole;
 
     if (testStatus === "suspended") {
       res.status(403).json({
@@ -58,9 +59,11 @@ export async function requireAuth(
     req.user = {
       uid: testUid,
       email: `${testRole}@aicafe.test`,
+      accountDomain: testDomain,
       role: testRole,
       status: testStatus,
       permissions: ROLE_PERMISSIONS[testRole] || [],
+      employeeId: testRole === "staff" ? "STF-TEST" : testRole === "admin" ? "ADM-TEST" : undefined,
     };
     return next();
   }
@@ -70,12 +73,10 @@ export async function requireAuth(
     const adminAuth = getFirebaseAdminAuth();
     const decodedToken = await adminAuth.verifyIdToken(token);
 
-    // 5. Look up user profile to resolve role & status
-    const profile = await userService.getUserProfile(decodedToken.uid);
-    const role: UserRole = profile?.role || (decodedToken.role as UserRole) || "customer";
-    const status: UserStatus = profile?.status || "active";
+    // 5. Look up user account domain and profile via AccountResolutionService
+    const resolved = await accountResolutionService.resolveAccount(decodedToken.uid);
 
-    if (status === "suspended") {
+    if (resolved.status === "suspended") {
       res.status(403).json({
         success: false,
         error: {
@@ -89,13 +90,15 @@ export async function requireAuth(
     // 6. Attach authenticated user information to Express request
     const authenticatedUser: AuthenticatedUser = {
       uid: decodedToken.uid,
-      email: decodedToken.email,
+      email: decodedToken.email || resolved.email,
       email_verified: decodedToken.email_verified,
-      name: decodedToken.name || profile?.displayName,
-      picture: (decodedToken.picture || profile?.photoURL) ?? undefined,
-      role,
-      status,
-      permissions: profile?.permissions || ROLE_PERMISSIONS[role] || [],
+      name: decodedToken.name || resolved.displayName,
+      picture: (decodedToken.picture || resolved.photoURL) ?? undefined,
+      accountDomain: resolved.accountDomain,
+      role: resolved.role,
+      status: resolved.status,
+      permissions: resolved.permissions || ROLE_PERMISSIONS[resolved.role] || [],
+      employeeId: resolved.employeeId,
       claims: decodedToken,
     };
 
@@ -156,9 +159,9 @@ export async function requireAuth(
 }
 
 /**
- * Role-based authorization middleware. Rejects requests where user lacks any of the allowed roles.
+ * Ensures user has exactly the specified role.
  */
-export function authorize(...allowedRoles: UserRole[]) {
+export function requireRole(requiredRole: UserRole) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
@@ -171,14 +174,81 @@ export function authorize(...allowedRoles: UserRole[]) {
       return;
     }
 
-    if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role)) {
+    if (req.user.role !== requiredRole && req.user.role !== "super_admin") {
       res.status(403).json({
         success: false,
         error: {
           code: "FORBIDDEN",
-          message: `Access denied. Requires one of the following roles: [${allowedRoles.join(
-            ", "
-          )}]. Your current role is "${req.user.role}".`,
+          message: `Access denied. Requires role: "${requiredRole}". Your current role is "${req.user.role}".`,
+        },
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+/**
+ * Ensures user possesses at least one of the allowed roles.
+ */
+export function requireAnyRole(allowedRoles: UserRole[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication is required to access this resource.",
+        },
+      });
+      return;
+    }
+
+    if (allowedRoles.length > 0 && !allowedRoles.includes(req.user.role) && req.user.role !== "super_admin") {
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: `Access denied. Requires one of: [${allowedRoles.join(", ")}]. Current role: "${req.user.role}".`,
+        },
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+/**
+ * Backwards compatible alias for requireAnyRole.
+ */
+export function authorize(...allowedRoles: UserRole[]) {
+  return requireAnyRole(allowedRoles);
+}
+
+/**
+ * Ensures user's account belongs to one of the specified account domains.
+ */
+export function requireAccountDomain(...allowedDomains: AccountDomain[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Authentication is required.",
+        },
+      });
+      return;
+    }
+
+    if (!allowedDomains.includes(req.user.accountDomain) && req.user.accountDomain !== "super_admin") {
+      res.status(403).json({
+        success: false,
+        error: {
+          code: "CROSS_DOMAIN_ACCESS_DENIED",
+          message: `Cross-domain access denied. Account domain "${req.user.accountDomain}" is not permitted for this endpoint.`,
         },
       });
       return;

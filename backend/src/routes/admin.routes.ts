@@ -27,6 +27,8 @@ router.get("/customers", (req, res, next) => adminController.getCustomers(req, r
 router.patch("/customers/:id/status", (req, res, next) => adminController.updateCustomerStatus(req, res, next));
 
 router.get("/staff", (req, res, next) => adminController.getStaff(req, res, next));
+router.post("/staff", (req, res, next) => adminController.createStaff(req, res, next));
+router.patch("/staff/:id/status", (req, res, next) => adminController.updateStaffStatus(req, res, next));
 router.post("/staff/role", (req, res, next) => adminController.assignStaffRole(req, res, next));
 
 // 5. Analytics & Audit

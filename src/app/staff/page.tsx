@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { RoleGuard } from "@/features/auth/components/role-guard";
+import { StaffGuard } from "@/features/auth/components/domain-guards";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { signOutUser } from "@/features/auth/services/auth.service";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Container } from "@/components/layout/container";
@@ -21,6 +22,7 @@ import {
   ArrowRight,
   Shield,
   Coffee,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -163,6 +165,19 @@ function StaffDashboardContent() {
                     </Button>
                   </Link>
                 )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await signOutUser();
+                    window.location.href = "/staff-login";
+                  }}
+                  className="gap-2 border-espresso/20 text-espresso hover:bg-red-50 hover:text-red-700 hover:border-red-200"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </Button>
               </div>
             </div>
 
@@ -497,8 +512,8 @@ function StaffDashboardContent() {
 
 export default function StaffPage() {
   return (
-    <RoleGuard allowedRoles={["staff", "admin", "super_admin"]}>
+    <StaffGuard fallbackUrl="/">
       <StaffDashboardContent />
-    </RoleGuard>
+    </StaffGuard>
   );
 }

@@ -3,6 +3,7 @@ import { catalogService } from "../services/catalog.service";
 import { inventoryService } from "../services/operations/inventory.service";
 import { orderService } from "../services/operations/order.service";
 import { userService } from "../services/user.service";
+import { privilegedAccountService } from "../services/privileged-account.service";
 import { auditService } from "../services/operations/audit.service";
 import { ProductDoc } from "../types/catalog";
 import { UserRole, UserStatus } from "../types/roles";
@@ -289,11 +290,96 @@ export class AdminController {
 
   async getStaff(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const staffList = await userService.listStaff();
+      const staffList = await privilegedAccountService.listStaffAccounts();
       res.status(200).json({
         success: true,
         staff: staffList,
         count: staffList.length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async createStaff(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { uid, email, displayName, employeeId, permissions, role } = req.body as {
+        uid?: string;
+        email: string;
+        displayName?: string;
+        employeeId?: string;
+        permissions?: string[];
+        role?: string;
+      };
+
+      if (role && role !== "staff") {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Cannot provision non-staff roles through staff management endpoint.",
+          },
+        });
+        return;
+      }
+
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Staff email is required.",
+          },
+        });
+        return;
+      }
+
+      const staffUid = uid || `stf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const staffName = displayName || email.split("@")[0] || "Café Staff";
+
+      const actor = req.user!;
+      const created = await privilegedAccountService.createStaffAccount(
+        { uid: staffUid, email, displayName: staffName, employeeId, permissions },
+        actor.uid,
+        actor.role
+      );
+
+      res.status(201).json({
+        success: true,
+        staff: created,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async updateStaffStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const targetUid = req.params.id as string;
+      const { status } = req.body as { status: UserStatus };
+
+      if (!status || !["active", "suspended"].includes(status)) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Status must be either 'active' or 'suspended'.",
+          },
+        });
+        return;
+      }
+
+      const actor = req.user!;
+      const updated = await privilegedAccountService.updateStaffStatus(
+        targetUid,
+        status,
+        actor.uid,
+        actor.role
+      );
+
+      res.status(200).json({
+        success: true,
+        staff: updated,
       });
     } catch (err) {
       next(err);
@@ -316,6 +402,19 @@ export class AdminController {
       }
 
       const actor = req.user!;
+
+      // An Admin cannot assign or promote to Super Admin
+      if (role === "super_admin" && actor.role !== "super_admin") {
+        res.status(403).json({
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Strict Access Violation: Only a Super Administrator can assign the Super Admin role.",
+          },
+        });
+        return;
+      }
+
       const updated = await userService.assignRole(targetUid, role, actor.uid, actor.role);
 
       res.status(200).json({

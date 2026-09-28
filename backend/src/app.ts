@@ -10,6 +10,7 @@ import { catalogRoutes } from "./routes/catalog.routes";
 import { baristaRoutes } from "./routes/barista.routes";
 import { staffRoutes } from "./routes/staff.routes";
 import { adminRoutes } from "./routes/admin.routes";
+import { superAdminRoutes } from "./routes/super-admin.routes";
 
 export function createApp(): Express {
   const app = express();
@@ -50,6 +51,7 @@ export function createApp(): Express {
   app.use("/api/barista", baristaRoutes);
   app.use("/api/staff", staffRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/super-admin", superAdminRoutes);
 
   // 5. 404 & Centralized Error Handlers
   app.use(notFoundHandler);

@@ -124,46 +124,82 @@ export async function createUserDocument(
 }
 
 /**
- * Retrieves a user document from Firestore with detailed instrumentation.
+ * Retrieves an account profile document across all 4 account domains:
+ * superAdminAccounts -> adminAccounts -> staffAccounts -> users
  */
 export async function getUserDocument(uid: string): Promise<UserDocument | null> {
-  // 1. When Firebase reports no authenticated user, do NOT attempt to read users/{uid}
+  // 1. When Firebase reports no authenticated user, do NOT attempt to read collections
   if (!uid || typeof uid !== "string") {
     return null;
   }
 
-  // 2 & 4. Ensure current auth session exists and matches target UID exactly
+  // 2. Ensure current auth session exists and matches target UID exactly
   if (!auth.currentUser || auth.currentUser.uid !== uid) {
     return null;
   }
 
-  // Instrument before getDoc
-  const diag = await logDiagnostic("getUserDocument", uid);
-  if (!diag.valid) {
-    return null;
-  }
-
-  const userDocRef = doc(db, "users", uid);
-
+  // 3. Try checking backend /api/me first if available for authoritative resolution
   try {
-    console.log(`[User Service: getUserDocument]: Executing getDoc(${userDocRef.path})...`);
-    const userSnapshot = await getDoc(userDocRef);
-
-    // 9. Verify getDoc correctly returns exists() === false when missing
-    if (userSnapshot.exists()) {
-      console.log(`[User Service: getUserDocument]: getDoc(${userDocRef.path}) SUCCEEDED. Document exists.`);
-      return userSnapshot.data() as UserDocument;
-    } else {
-      console.log(`[User Service: getUserDocument]: getDoc(${userDocRef.path}) SUCCEEDED. Document does not exist (exists = false).`);
-      return null;
-    }
-  } catch (error: unknown) {
-    const err = error as { code?: string; message?: string };
-    console.error(`[User Service: FAILURE in getUserDocument -> getDoc(${userDocRef.path})]:`, {
-      code: err?.code,
-      message: err?.message,
-      error,
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch("http://localhost:5001/api/me", {
+      headers: { Authorization: `Bearer ${token}` },
     });
-    return null;
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && data?.user) {
+        return {
+          uid: data.user.uid,
+          displayName: data.user.name || auth.currentUser.displayName || "Café Member",
+          email: data.user.email || auth.currentUser.email || "",
+          photoURL: data.user.picture || auth.currentUser.photoURL || null,
+          role: data.user.role || "customer",
+          status: data.user.status || "active",
+          permissions: data.user.permissions || [],
+          accountDomain: data.user.accountDomain || "customer",
+          employeeId: data.user.employeeId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+  } catch {
+    // Backend fetch failed or not reachable, fallback to direct Firestore inspection
   }
+
+  // 4. Fallback: Direct Firestore domain lookup in hierarchy
+  const domains = [
+    { coll: "superAdminAccounts", role: "super_admin", domain: "super_admin" },
+    { coll: "adminAccounts", role: "admin", domain: "admin" },
+    { coll: "staffAccounts", role: "staff", domain: "staff" },
+    { coll: "users", role: "customer", domain: "customer" },
+  ] as const;
+
+  for (const { coll, role, domain } of domains) {
+    try {
+      const ref = doc(db, coll, uid);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const d = snap.data();
+        return {
+          uid,
+          displayName: d.displayName || auth.currentUser.displayName || "Café Member",
+          email: d.email || auth.currentUser.email || "",
+          photoURL: d.photoURL || auth.currentUser.photoURL || null,
+          role: (d.role as any) || role,
+          status: (d.status as any) || "active",
+          permissions: d.permissions || [],
+          accountDomain: domain,
+          employeeId: d.employeeId,
+          createdAt: d.createdAt || new Date().toISOString(),
+          updatedAt: d.updatedAt || new Date().toISOString(),
+          ...d,
+        } as UserDocument;
+      }
+    } catch {
+      // Ignore collection read error if collection rule denied or not existing, proceed to next
+    }
+  }
+
+  return null;
 }
+

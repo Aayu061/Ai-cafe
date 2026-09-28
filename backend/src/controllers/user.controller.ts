@@ -14,6 +14,8 @@ export async function getMe(req: Request, res: Response): Promise<void> {
       role: user.role,
       status: user.status,
       permissions: user.permissions || [],
+      accountDomain: user.accountDomain,
+      employeeId: user.employeeId || null,
     },
   });
 }

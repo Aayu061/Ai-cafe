@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { RoleGuard } from "@/features/auth/components/role-guard";
+import { AdminGuard } from "@/features/auth/components/domain-guards";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import {
   LayoutDashboard,
@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const role = userProfile?.role || "admin";
 
   return (
-    <RoleGuard allowedRoles={["admin", "super_admin"]} fallbackUrl="/staff">
+    <AdminGuard fallbackUrl="/staff">
       <div className="min-h-screen bg-[#F8F9FA] text-[#1A1A1A] flex flex-col md:flex-row">
         {/* Mobile Header */}
         <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
@@ -144,7 +144,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => signOut()}
+                onClick={async () => {
+                  await signOut();
+                  window.location.href = "/admin-login";
+                }}
                 className="w-full justify-center gap-2 text-xs border-gray-300 text-gray-700 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -159,6 +162,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </main>
       </div>
-    </RoleGuard>
+    </AdminGuard>
   );
 }

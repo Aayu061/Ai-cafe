@@ -170,7 +170,7 @@ function LoginForm() {
         </Button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-espresso/10 text-center">
+      <div className="mt-8 pt-6 border-t border-espresso/10 text-center space-y-3">
         <p className="text-xs text-espresso/75">
           New to AI Café?{" "}
           <Link
@@ -180,6 +180,15 @@ function LoginForm() {
             Create an account
           </Link>
         </p>
+
+        <div className="pt-1">
+          <Link
+            href="/team"
+            className="inline-flex items-center gap-1.5 text-[11px] text-warmgray hover:text-espresso transition-colors font-medium tracking-wide"
+          >
+            <span>Café Team Access →</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
