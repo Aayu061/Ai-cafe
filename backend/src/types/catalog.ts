@@ -1,10 +1,20 @@
+export type ProductType = "drink" | "cake" | "bakery" | "snack" | "gourmet";
+
 export type ProductCategory =
   | "cold-coffee"
   | "frappe"
   | "creamy"
   | "smoothie"
   | "matcha"
-  | "hot-coffee";
+  | "hot-coffee"
+  | "coffee"
+  | "tea"
+  | "cakes"
+  | "desserts"
+  | "bakery"
+  | "biscuits"
+  | "savory"
+  | "gourmet";
 
 export interface DrinkConfiguration {
   productId: string;
@@ -30,6 +40,7 @@ export interface ProductDoc {
   name: string;
   slug: string;
   description: string;
+  productType?: ProductType;
   category: ProductCategory;
   categoryLabel: string;
   basePrice: number;
@@ -44,6 +55,7 @@ export interface ProductDoc {
   strengthProfile: number;
   textureProfile: string;
   temperatureProfile: "Iced" | "Hot" | "Blended";
+  pairings?: string[]; // Recommended snack/food pairings
   defaultConfiguration: DrinkConfiguration;
   createdAt: string;
   updatedAt: string;

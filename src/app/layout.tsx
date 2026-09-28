@@ -26,6 +26,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
 };
+import { BootScreen } from "@/components/boot/boot-screen";
+
 export default function RootLayout({
   children,
 }: {
@@ -43,7 +45,10 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans bg-cream text-espresso antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <BootScreen />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

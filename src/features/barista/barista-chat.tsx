@@ -2,11 +2,16 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
 import { recommendDrink } from "@/lib/api-client";
 import {
   BaristaConversationMessage,
   BaristaRecommendation,
   BaristaPreferences,
+  BaristaComparisonItem,
+  BaristaPairingItem,
+  BaristaProductSummary,
 } from "@/types/barista";
 import { RecommendationCard } from "./recommendation-card";
 import { BaristaPrompts } from "./barista-prompts";
@@ -18,13 +23,17 @@ import {
   AlertCircle,
   Coffee,
   Info,
+  Scale,
+  Utensils,
+  ArrowRight,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const INITIAL_GREETING: BaristaConversationMessage = {
   role: "assistant",
   content:
-    "Hello! I am your AI Barista. Tell me what you're craving, your mood, caffeine needs, or dietary preferences, and I'll craft an authoritative recipe tailored to your exact taste profile.",
+    "Hello! I am your AI Barista. Tell me what you're craving, your mood, caffeine needs, or budget, and I'll craft an authoritative recipe or answer any question about our café menu.",
   timestamp: Date.now(),
 };
 
@@ -40,6 +49,10 @@ export function BaristaChat() {
   const [loadingStep, setLoadingStep] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+
+  // Phase 6: Multi-turn Preference Accumulation & Repetition Tracking
+  const [currentPreferences, setCurrentPreferences] = useState<BaristaPreferences>({});
+  const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,13 +91,13 @@ export function BaristaChat() {
     setMessages(newHistory);
     setIsLoading(true);
 
-    // Dynamic loading steps for delightful sensory feedback
-    setLoadingStep("Interpreting sensory desires & mood...");
+    // Dynamic sensory progress feedback
+    setLoadingStep("Interpreting intent & sensory desires...");
     const t1 = setTimeout(() => {
-      setLoadingStep("Matching with café catalog & real ingredients...");
+      setLoadingStep("Querying authoritative café catalog & pricing...");
     }, 600);
     const t2 = setTimeout(() => {
-      setLoadingStep("Running Drink DNA sensory & pricing engine...");
+      setLoadingStep("Validating Drink DNA & crafting response...");
     }, 1200);
 
     try {
@@ -97,7 +110,13 @@ export function BaristaChat() {
           content: m.content,
         }));
 
-      const res = await recommendDrink(text, contextTurns);
+      // Phase 6: Grounded API call with cumulative preferences and recent IDs
+      const res = await recommendDrink(
+        text,
+        contextTurns,
+        currentPreferences,
+        recentProductIds
+      );
 
       clearTimeout(t1);
       clearTimeout(t2);
@@ -120,12 +139,27 @@ export function BaristaChat() {
         return;
       }
 
+      // Update multi-turn cumulative preferences
+      if (res.preferences) {
+        setCurrentPreferences((prev) => ({ ...prev, ...res.preferences }));
+      }
+
+      // Update recent product IDs to avoid repetitive recommendations
+      if (res.recommendations && res.recommendations.length > 0) {
+        const newIds = res.recommendations.map((r) => r.product.id);
+        setRecentProductIds((prev) => [...new Set([...prev, ...newIds])].slice(-8));
+      }
+
       const assistantMessage: BaristaConversationMessage = {
         role: "assistant",
         content:
           res.message ||
-          "Here are the ideal beverage recommendations tailored to your profile:",
+          "Here is what our café catalog and sensory engine crafted for you:",
+        intent: res.intent,
         recommendations: res.recommendations || [],
+        comparison: res.comparison,
+        productDetails: res.productDetails,
+        pairings: res.pairings,
         preferences: res.preferences,
         followUpSuggestion: res.followUpSuggestion,
         timestamp: Date.now(),
@@ -147,6 +181,8 @@ export function BaristaChat() {
 
   const handleReset = () => {
     setMessages([INITIAL_GREETING]);
+    setCurrentPreferences({});
+    setRecentProductIds([]);
     setErrorMsg(null);
     setIsRateLimited(false);
     setInputValue("");
@@ -160,13 +196,13 @@ export function BaristaChat() {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-caramel/15 text-caramel-dark text-xs font-semibold tracking-wider uppercase mb-2 border border-caramel/20">
             <Sparkles className="w-3.5 h-3.5 text-caramel" />
-            <span>Real AI Sensory Engine</span>
+            <span>AI Barista Intelligence V2</span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-espresso tracking-tight">
             Consult Your AI Barista
           </h1>
           <p className="text-sm text-espresso/70 mt-1">
-            Natural language drinks consultation grounded in real café ingredients and authoritative pricing.
+            Intent-aware conversational café companion with authoritative pricing, budget reasoning, and Drink DNA.
           </p>
         </div>
 
@@ -208,13 +244,21 @@ export function BaristaChat() {
               <div className="flex-1 space-y-4">
                 {/* Assistant Chat Bubble */}
                 <div className="max-w-2xl bg-white rounded-3xl rounded-tl-sm p-5 border border-espresso/10 shadow-soft text-espresso">
+                  {/* Intent Indicator Pill */}
+                  {msg.intent && msg.intent !== "recommend" && (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAE2D2] text-[#3A2418] text-[10px] font-semibold tracking-wider uppercase mb-2">
+                      <Compass className="w-3 h-3 text-[#C98A4A]" />
+                      <span>Intent: {msg.intent.replace("_", " ")}</span>
+                    </div>
+                  )}
+
                   <p className="text-sm sm:text-base leading-relaxed mb-2">{msg.content}</p>
 
                   {/* Extracted Sensory Preferences Badges */}
                   {msg.preferences && Object.keys(msg.preferences).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-espresso/5 flex flex-wrap items-center gap-1.5">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-warmgray mr-1">
-                        Detected Taste Preferences:
+                        Active Taste Profile:
                       </span>
                       {msg.preferences.temperature && (
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-50 text-cyan-800 border border-cyan-200 capitalize">
@@ -231,24 +275,49 @@ export function BaristaChat() {
                           ⚡ Caffeine: {msg.preferences.strength}%
                         </span>
                       )}
-                      {msg.preferences.flavorPreferences?.map((f) => (
-                        <span
-                          key={f}
-                          className="text-xs px-2.5 py-0.5 rounded-full bg-caramel/10 text-caramel-dark border border-caramel/20 capitalize"
-                        >
-                          🍯 {f}
+                      {msg.preferences.flavor && (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-caramel/10 text-caramel-dark border border-caramel/20 capitalize">
+                          🍯 {msg.preferences.flavor}
                         </span>
-                      ))}
+                      )}
+                      {typeof msg.preferences.budget === "number" && (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          ₹ Under ₹{msg.preferences.budget}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* Grounded Drink Recommendations Grid */}
-                {msg.recommendations && msg.recommendations.length > 0 && (
+                {/* PHASE 6: COMPARISON BLOCK */}
+                {msg.comparison && (
+                  <ComparisonBlock comparison={msg.comparison} />
+                )}
+
+                {/* PHASE 6: ARTISAN FOOD PAIRINGS BLOCK */}
+                {msg.pairings && msg.pairings.length > 0 && (
+                  <PairingsBlock pairings={msg.pairings} />
+                )}
+
+                {/* PHASE 6: PRODUCT DETAILS BLOCK */}
+                {msg.productDetails && (
+                  <ProductDetailsBlock product={msg.productDetails} />
+                )}
+
+                {/* Standard Grounded Drink Recommendations Grid */}
+                {msg.recommendations && msg.recommendations.length > 0 && !msg.comparison && !msg.productDetails && (
                   <div className="space-y-4 pt-2">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-espresso/80">
                       <Coffee className="w-4 h-4 text-caramel" />
-                      <span>Recommended Custom Creations ({msg.recommendations.length})</span>
+                      <span>
+                        {msg.intent === "cheapest"
+                          ? "Lowest-Priced Option"
+                          : msg.intent === "budget"
+                          ? "Budget Matches"
+                          : msg.intent === "random"
+                          ? "Curated Surprise"
+                          : `Recommended Custom Creations (${msg.recommendations.length})`}
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -338,7 +407,7 @@ export function BaristaChat() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Describe your desired drink (e.g., 'I want a cold caramel latte with oat milk and light ice')..."
+              placeholder="Ask anything (e.g. 'cheapest coffee', 'under ₹200', 'compare latte and cold brew', 'snack with cold brew')..."
               disabled={isLoading}
               maxLength={500}
               className="w-full pl-5 pr-14 py-3.5 sm:py-4 rounded-full bg-white border border-espresso/15 text-sm text-espresso placeholder:text-warmgray focus:outline-none focus:border-caramel focus:ring-2 focus:ring-caramel/20 shadow-soft disabled:opacity-60 transition-all"
@@ -366,6 +435,200 @@ export function BaristaChat() {
             )}
           </Button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 6: Side-by-side Product Comparison Block
+ */
+function ComparisonBlock({ comparison }: { comparison: BaristaComparisonItem }) {
+  const { productA, productB, highlights, priceDifference } = comparison;
+
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-espresso/10 shadow-soft space-y-5">
+      <div className="flex items-center justify-between pb-3 border-b border-espresso/10">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-caramel-dark">
+          <Scale className="w-4 h-4 text-caramel" />
+          <span>Side-by-Side Comparison</span>
+        </div>
+        {priceDifference > 0 && (
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 font-medium">
+            ₹{priceDifference} Price Difference
+          </span>
+        )}
+      </div>
+
+      {/* Two Column Product Contrast */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Product A */}
+        <div className="p-4 rounded-2xl bg-cream/40 border border-espresso/5 flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-caramel uppercase tracking-wider">
+              {productA.categoryLabel}
+            </span>
+            <h4 className="font-serif text-lg font-bold text-espresso mt-0.5">
+              {productA.name}
+            </h4>
+            <p className="text-xs text-espresso/70 mt-1 line-clamp-2">
+              {productA.description}
+            </p>
+            <div className="mt-3 text-sm font-bold text-espresso">
+              ₹{productA.basePrice}
+            </div>
+          </div>
+          <Link
+            href={`/builder?preset=${productA.id}`}
+            className="mt-4 inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-espresso text-cream text-xs font-medium hover:bg-espresso/90 transition-colors"
+          >
+            <span>Customize {productA.name.split(" ")[0]}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {/* Product B */}
+        <div className="p-4 rounded-2xl bg-cream/40 border border-espresso/5 flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-caramel uppercase tracking-wider">
+              {productB.categoryLabel}
+            </span>
+            <h4 className="font-serif text-lg font-bold text-espresso mt-0.5">
+              {productB.name}
+            </h4>
+            <p className="text-xs text-espresso/70 mt-1 line-clamp-2">
+              {productB.description}
+            </p>
+            <div className="mt-3 text-sm font-bold text-espresso">
+              ₹{productB.basePrice}
+            </div>
+          </div>
+          <Link
+            href={`/builder?preset=${productB.id}`}
+            className="mt-4 inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-espresso text-cream text-xs font-medium hover:bg-espresso/90 transition-colors"
+          >
+            <span>Customize {productB.name.split(" ")[0]}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Sensory Highlights */}
+      {highlights && highlights.length > 0 && (
+        <div className="pt-2">
+          <p className="text-xs font-semibold text-espresso uppercase tracking-wider mb-2">
+            Sensory Differences:
+          </p>
+          <ul className="space-y-1.5">
+            {highlights.map((h, i) => (
+              <li key={i} className="text-xs text-espresso/80 flex items-start gap-2">
+                <span className="text-caramel mt-0.5">•</span>
+                <span>{h}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 6: Food & Snack Pairings Block
+ */
+function PairingsBlock({ pairings }: { pairings: BaristaPairingItem[] }) {
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-espresso/10 shadow-soft space-y-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-caramel-dark pb-2 border-b border-espresso/10">
+        <Utensils className="w-4 h-4 text-caramel" />
+        <span>Chef's Recommended Café Pairings</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {pairings.map((p, idx) => (
+          <div
+            key={idx}
+            className="p-3.5 rounded-2xl bg-cream/40 border border-espresso/5 flex flex-col justify-between text-left"
+          >
+            <div>
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-caramel px-2 py-0.5 rounded-full bg-caramel/10">
+                  {p.category}
+                </span>
+                {typeof p.pairingPrice === "number" && (
+                  <span className="text-xs font-bold text-espresso">
+                    ₹{p.pairingPrice}
+                  </span>
+                )}
+              </div>
+              <h5 className="font-serif font-bold text-sm text-espresso mt-1">
+                {p.name}
+              </h5>
+              <p className="text-[11px] text-espresso/70 mt-1 leading-relaxed">
+                {p.description}
+              </p>
+            </div>
+
+            <div className="mt-3 pt-2 border-t border-espresso/5 text-[10px] text-espresso/80 italic">
+              ✨ {p.whyItWorks}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 6: Product Details Block
+ */
+function ProductDetailsBlock({ product }: { product: BaristaProductSummary & { tasteNotes?: string[]; calories?: number } }) {
+  return (
+    <div className="bg-white rounded-3xl p-6 border border-espresso/10 shadow-soft space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-caramel">
+            {product.categoryLabel}
+          </span>
+          <h3 className="font-serif text-2xl font-bold text-espresso mt-0.5">
+            {product.name}
+          </h3>
+        </div>
+        {typeof product.basePrice === "number" && (
+          <div className="text-xl font-bold text-espresso">
+            ₹{product.basePrice}
+          </div>
+        )}
+      </div>
+
+      <p className="text-sm text-espresso/80 leading-relaxed">
+        {product.description}
+      </p>
+
+      {product.tasteNotes && product.tasteNotes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pt-2">
+          {product.tasteNotes.map((note, i) => (
+            <span
+              key={i}
+              className="text-xs px-2.5 py-1 rounded-full bg-cream text-espresso border border-espresso/10"
+            >
+              🌿 {note}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="pt-3 flex items-center justify-between border-t border-espresso/10">
+        <span className="text-xs text-emerald-800 font-medium">
+          ✓ Freshly Crafted in Café
+        </span>
+        <Link
+          href={`/builder?preset=${product.id}`}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-espresso text-cream text-xs font-semibold hover:bg-espresso/90 shadow-soft transition-colors"
+        >
+          <span>Craft in Drink Studio</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
     </div>
   );

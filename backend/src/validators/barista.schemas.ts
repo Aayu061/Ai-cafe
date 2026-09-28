@@ -11,6 +11,26 @@ export const baristaConversationMessageSchema = z
     content: val.content || val.text || "",
   }));
 
+export const baristaPreferencesInputSchema = z
+  .object({
+    temperature: z.enum(["hot", "cold", "blended"]).optional(),
+    sweetness: z.number().min(0).max(100).optional(),
+    strength: z.number().min(0).max(100).optional(),
+    creaminess: z.number().min(0).max(100).optional(),
+    chill: z.number().min(0).max(100).optional(),
+    richness: z.number().min(0).max(100).optional(),
+    flavor: z.string().max(100).optional(),
+    flavorPreferences: z.array(z.string().max(100)).optional(),
+    flavorAvoidances: z.array(z.string().max(100)).optional(),
+    milk: z.string().max(100).optional(),
+    milkPreference: z.string().max(100).optional(),
+    basePreference: z.string().max(100).optional(),
+    category: z.string().max(100).optional(),
+    categoryPreference: z.string().max(100).optional(),
+    budget: z.number().min(0).max(10000).optional(),
+  })
+  .optional();
+
 export const recommendationRequestSchema = z.object({
   message: z
     .string()
@@ -19,9 +39,11 @@ export const recommendationRequestSchema = z.object({
     .trim(),
   conversation: z
     .array(baristaConversationMessageSchema)
-    .max(6, "Conversation history cannot exceed 6 messages.")
+    .max(8, "Conversation history cannot exceed 8 messages.")
     .optional()
     .default([]),
+  preferences: baristaPreferencesInputSchema,
+  recentProductIds: z.array(z.string().max(100)).max(10).optional().default([]),
 });
 
 export type BaristaConversationMessage = z.infer<typeof baristaConversationMessageSchema>;

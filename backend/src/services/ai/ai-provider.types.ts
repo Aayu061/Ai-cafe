@@ -7,6 +7,20 @@ export interface BaristaMessage {
   content: string;
 }
 
+export type BaristaIntent =
+  | "recommend"
+  | "cheapest"
+  | "most_expensive"
+  | "random"
+  | "category"
+  | "budget"
+  | "ingredient"
+  | "compare"
+  | "customize"
+  | "details"
+  | "availability"
+  | "pairing";
+
 export interface BaristaPreferences {
   temperature?: "hot" | "cold" | "blended";
   sweetness?: number; // 0 - 100
@@ -14,11 +28,15 @@ export interface BaristaPreferences {
   creaminess?: number; // 0 - 100
   chill?: number; // 0 - 100
   richness?: number; // 0 - 100
+  flavor?: string;
   flavorPreferences?: string[];
   flavorAvoidances?: string[];
+  milk?: string;
   milkPreference?: string;
   basePreference?: string;
+  category?: string;
   categoryPreference?: string;
+  budget?: number; // Max budget in INR
 }
 
 export interface CatalogContextItem {
@@ -47,10 +65,15 @@ export interface SafeCatalogContext {
 }
 
 export interface BaristaExtractionResult {
+  intent?: BaristaIntent;
   preferences: BaristaPreferences;
   intentSummary: string;
   suggestedProductId?: string;
   suggestedCustomizations?: Partial<DrinkConfiguration>;
+  comparisonIds?: [string, string];
+  targetIngredient?: string;
+  targetCategory?: string;
+  targetBudget?: number;
 }
 
 export interface BaristaRecommendation {
@@ -61,6 +84,8 @@ export interface BaristaRecommendation {
     categoryLabel: string;
     description: string;
     image: string;
+    available?: boolean;
+    basePrice?: number;
   };
   configuration: DrinkConfiguration;
   reason: string;
@@ -74,11 +99,30 @@ export interface BaristaRecommendation {
   matchScore?: number;
 }
 
+export interface BaristaComparisonItem {
+  productA: ProductDoc;
+  productB: ProductDoc;
+  highlights: string[];
+  priceDifference: number; // in INR
+}
+
+export interface BaristaPairingItem {
+  name: string;
+  category: "pastry" | "cookie" | "cake" | "savory";
+  description: string;
+  whyItWorks: string;
+  pairingPrice?: number;
+}
+
 export interface BaristaRecommendResponse {
   success: boolean;
+  intent: BaristaIntent;
   message: string;
   preferences: BaristaPreferences;
   recommendations: BaristaRecommendation[];
+  comparison?: BaristaComparisonItem;
+  productDetails?: ProductDoc;
+  pairings?: BaristaPairingItem[];
   followUpSuggestion?: string;
 }
 
@@ -87,12 +131,23 @@ export interface AiProvider {
   extractPreferences(
     message: string,
     history: BaristaMessage[],
-    catalogContext: SafeCatalogContext
+    catalogContext: SafeCatalogContext,
+    previousPreferences?: BaristaPreferences
   ): Promise<BaristaExtractionResult>;
   generateExplanation(
     product: ProductDoc,
     preferences: BaristaPreferences,
     config: DrinkConfiguration,
-    dna: DrinkDna
+    dna: DrinkDna,
+    intent?: BaristaIntent
+  ): Promise<string>;
+  generateIntentResponse?(
+    intent: BaristaIntent,
+    context: {
+      message: string;
+      products: ProductDoc[];
+      preferences: BaristaPreferences;
+      extra?: Record<string, unknown>;
+    }
   ): Promise<string>;
 }

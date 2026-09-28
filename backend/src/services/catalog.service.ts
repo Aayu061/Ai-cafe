@@ -89,6 +89,299 @@ export class CatalogService {
   }
 
   /**
+   * Finds the lowest-priced available product (optionally within a category).
+   */
+  async findCheapest(categoryKeyword?: string): Promise<ProductDoc | null> {
+    const products = await this.getProducts();
+    let available = products.filter((p) => p.available);
+    if (categoryKeyword) {
+      const kw = categoryKeyword.toLowerCase().trim();
+      available = available.filter(
+        (p) =>
+          p.category.toLowerCase().includes(kw) ||
+          p.categoryLabel.toLowerCase().includes(kw) ||
+          p.tags.some((t) => t.toLowerCase().includes(kw)) ||
+          (kw === "coffee" && (p.category === "cold-coffee" || p.category === "hot-coffee"))
+      );
+    }
+    if (available.length === 0) return null;
+    return available.sort((a, b) => a.basePrice - b.basePrice)[0] || null;
+  }
+
+  /**
+   * Finds the highest-priced / most premium available product (optionally within a category).
+   */
+  async findMostExpensive(categoryKeyword?: string): Promise<ProductDoc | null> {
+    const products = await this.getProducts();
+    let available = products.filter((p) => p.available);
+    if (categoryKeyword) {
+      const kw = categoryKeyword.toLowerCase().trim();
+      available = available.filter(
+        (p) =>
+          p.category.toLowerCase().includes(kw) ||
+          p.categoryLabel.toLowerCase().includes(kw) ||
+          p.tags.some((t) => t.toLowerCase().includes(kw)) ||
+          (kw === "coffee" && (p.category === "cold-coffee" || p.category === "hot-coffee"))
+      );
+    }
+    if (available.length === 0) return null;
+    return available.sort((a, b) => b.basePrice - a.basePrice)[0] || null;
+  }
+
+  /**
+   * Finds all available products within a max budget (sorted by price ascending).
+   */
+  async findWithinBudget(maxBudget: number, categoryKeyword?: string): Promise<ProductDoc[]> {
+    const products = await this.getProducts();
+    let available = products.filter((p) => p.available && p.basePrice <= maxBudget);
+    if (categoryKeyword) {
+      const kw = categoryKeyword.toLowerCase().trim();
+      available = available.filter(
+        (p) =>
+          p.category.toLowerCase().includes(kw) ||
+          p.categoryLabel.toLowerCase().includes(kw) ||
+          p.tags.some((t) => t.toLowerCase().includes(kw)) ||
+          (kw === "coffee" && (p.category === "cold-coffee" || p.category === "hot-coffee"))
+      );
+    }
+    return available.sort((a, b) => a.basePrice - b.basePrice);
+  }
+
+  /**
+   * Finds products matching a category name or related tag.
+   */
+  async findByCategory(categoryOrKeyword: string): Promise<ProductDoc[]> {
+    const products = await this.getProducts();
+    const kw = categoryOrKeyword.toLowerCase().trim();
+    return products.filter((p) => {
+      if (!p.available) return false;
+      if (p.category.toLowerCase() === kw) return true;
+      if (p.categoryLabel.toLowerCase().includes(kw)) return true;
+      if (kw === "coffee" && (p.category === "cold-coffee" || p.category === "hot-coffee")) return true;
+      if (kw === "tea" && (p.category === "matcha" || p.tags.some((t) => t.toLowerCase().includes("tea")))) return true;
+      return p.tags.some((t) => t.toLowerCase().includes(kw));
+    });
+  }
+
+  /**
+   * Finds products containing or featuring a specific ingredient, flavor, milk, or taste note.
+   */
+  async findByIngredient(ingredientOrFlavor: string): Promise<ProductDoc[]> {
+    const products = await this.getProducts();
+    const query = ingredientOrFlavor.toLowerCase().trim();
+    return products.filter((p) => {
+      if (!p.available) return false;
+      const config = p.defaultConfiguration;
+      const matchesConfig =
+        config.baseId.toLowerCase().includes(query) ||
+        config.milkId.toLowerCase().includes(query) ||
+        config.flavorId.toLowerCase().includes(query) ||
+        config.toppingIds.some((t) => t.toLowerCase().includes(query));
+      const matchesNotes = p.tasteNotes.some((n) => n.toLowerCase().includes(query));
+      const matchesDesc = p.description.toLowerCase().includes(query);
+      const matchesName = p.name.toLowerCase().includes(query);
+      return matchesConfig || matchesNotes || matchesDesc || matchesName;
+    });
+  }
+
+  /**
+   * Finds all currently available products.
+   */
+  async findAvailable(): Promise<ProductDoc[]> {
+    const products = await this.getProducts();
+    return products.filter((p) => p.available);
+  }
+
+  /**
+   * Compares two products side-by-side using actual authoritative catalog attributes.
+   */
+  async compareProducts(
+    idOrSlugA: string,
+    idOrSlugB: string
+  ): Promise<{
+    productA: ProductDoc;
+    productB: ProductDoc;
+    highlights: string[];
+    priceDifference: number;
+  } | null> {
+    const [pA, pB] = await Promise.all([
+      this.getProductByIdOrSlug(idOrSlugA),
+      this.getProductByIdOrSlug(idOrSlugB),
+    ]);
+
+    if (!pA || !pB) return null;
+
+    const priceDiff = Math.abs(pA.basePrice - pB.basePrice);
+    const highlights: string[] = [];
+
+    // Pricing contrast
+    if (pA.basePrice === pB.basePrice) {
+      highlights.push(`Both drinks share the exact same base price of ₹${pA.basePrice}.`);
+    } else {
+      const cheaper = pA.basePrice < pB.basePrice ? pA : pB;
+      const pricier = pA.basePrice < pB.basePrice ? pB : pA;
+      highlights.push(
+        `${cheaper.name} is ₹${priceDiff} more budget-friendly than ${pricier.name} (₹${cheaper.basePrice} vs ₹${pricier.basePrice}).`
+      );
+    }
+
+    // Temperature contrast
+    if (pA.temperatureProfile !== pB.temperatureProfile) {
+      highlights.push(
+        `${pA.name} is served ${pA.temperatureProfile.toLowerCase()}, whereas ${pB.name} is ${pB.temperatureProfile.toLowerCase()}.`
+      );
+    }
+
+    // Sensory contrast (strength & sweetness)
+    if (Math.abs(pA.strengthProfile - pB.strengthProfile) >= 20) {
+      const stronger = pA.strengthProfile > pB.strengthProfile ? pA : pB;
+      highlights.push(`${stronger.name} delivers a much stronger caffeine/boldness kick.`);
+    }
+
+    if (Math.abs(pA.sweetnessProfile - pB.sweetnessProfile) >= 15) {
+      const sweeter = pA.sweetnessProfile > pB.sweetnessProfile ? pA : pB;
+      highlights.push(`${sweeter.name} is distinctly sweeter.`);
+    }
+
+    return {
+      productA: pA,
+      productB: pB,
+      highlights,
+      priceDifference: priceDiff,
+    };
+  }
+
+  /**
+   * Retrieves data-driven food and snack pairings for a product.
+   */
+  async findPairings(idOrSlug: string): Promise<
+    Array<{
+      name: string;
+      category: "pastry" | "cookie" | "cake" | "savory";
+      description: string;
+      whyItWorks: string;
+    }>
+  > {
+    const product = await this.getProductByIdOrSlug(idOrSlug);
+    if (!product) return [];
+
+    const defaultPairings = product.pairings || ["Almond Croissant", "Sea Salt Caramel Biscotti"];
+
+    const pairingDescriptions: Record<
+      string,
+      { category: "pastry" | "cookie" | "cake" | "savory"; description: string; whyItWorks: string }
+    > = {
+      "Almond Croissant": {
+        category: "pastry",
+        description: "Flaky French pastry layered with rich frangipane almond cream.",
+        whyItWorks: "The nutty almond butter cuts through deep coffee notes effortlessly.",
+      },
+      "Sea Salt Caramel Biscotti": {
+        category: "cookie",
+        description: "Twice-baked Tuscan artisan biscotti with fleur de sel and caramel drizzle.",
+        whyItWorks: "Crunchy texture pairs with slow-steeped iced or warm brew.",
+      },
+      "Dark Chocolate Truffle": {
+        category: "cake",
+        description: "70% single-origin Belgian dark chocolate ganache dust.",
+        whyItWorks: "Brings out roasted caramel and espresso crema aromatics.",
+      },
+      "Belgian Waffle Bites": {
+        category: "pastry",
+        description: "Crisp pearl-sugar Belgian waffle squares with warm maple mist.",
+        whyItWorks: "Warm buttery contrast to frosted blended frappes.",
+      },
+      "Vanilla Bean Shortbread": {
+        category: "cookie",
+        description: "Melt-in-mouth Scottish shortbread made with Madagascar vanilla bean.",
+        whyItWorks: "Subtle buttery sweetness balances rich cocoa.",
+      },
+      "New York Cheesecake Slice": {
+        category: "cake",
+        description: "Dense, velvety cream cheese on a graham cracker crust.",
+        whyItWorks: "Tangy rich cream complements sweet berry notes perfectly.",
+      },
+      "Pistachio Macaron": {
+        category: "cookie",
+        description: "Delicate French almond meringue filled with Sicilian pistachio ganache.",
+        whyItWorks: "Airy elegance that elevates fruity chilled drinks.",
+      },
+      "Coconut Chia Pudding": {
+        category: "savory",
+        description: "Creamy organic chia seed pudding soaked in coconut cream with mango pearls.",
+        whyItWorks: "Harmonizes with tropical smoothies for a wholesome boost.",
+      },
+      "Lemon Tart": {
+        category: "pastry",
+        description: "Zesty lemon curd in a crisp sweet pastry shell.",
+        whyItWorks: "Vibrant citrus acidity enhances tropical fruit sweetness.",
+      },
+      "Japanese Mochi Trio": {
+        category: "cake",
+        description: "Handcrafted soft rice cake filled with sweet red bean and white sesame.",
+        whyItWorks: "Traditional zen harmony with stone-ground ceremonial matcha.",
+      },
+      "Matcha Financier": {
+        category: "pastry",
+        description: "French browned-butter almond cake infused with Kyoto Uji matcha.",
+        whyItWorks: "Intensifies earthy green tea notes while adding velvety butter.",
+      },
+      "Classic Butter Croissant": {
+        category: "pastry",
+        description: "Golden honeycombed all-butter croissant baked fresh daily.",
+        whyItWorks: "The timeless companion for a steamed vanilla latte.",
+      },
+      "Cinnamon Brioche Roll": {
+        category: "pastry",
+        description: "Swirled brioche infused with Ceylon cinnamon and cream cheese glaze.",
+        whyItWorks: "Warm aromatic spice enriches velvety espresso crema.",
+      },
+      "Hazelnut Babka": {
+        category: "pastry",
+        description: "Braided brioche ribboned with dark chocolate fudge and roasted hazelnuts.",
+        whyItWorks: "Complements mocha ganache with toasty hazelnut crunch.",
+      },
+      "Double Chocolate Cookie": {
+        category: "cookie",
+        description: "Chewy Dutch cocoa cookie loaded with melted dark and milk chocolate chips.",
+        whyItWorks: "Ultimate chocolate indulgence alongside hot mocha cream.",
+      },
+      "Granola Parfait": {
+        category: "savory",
+        description: "Toasted maple oats, pumpkin seeds, and Greek yogurt layered with wild honey.",
+        whyItWorks: "Clean, protein-rich crunch matching tart wild berries.",
+      },
+      "Blueberry Scone": {
+        category: "pastry",
+        description: "Tender buttermilk scone bursting with wild mountain blueberries.",
+        whyItWorks: "Berry-on-berry synergy with light afternoon refreshment.",
+      },
+    };
+
+    const priceMap: Record<string, number> = {
+      pastry: 130,
+      cookie: 95,
+      cake: 160,
+      savory: 140,
+    };
+
+    return defaultPairings.map((name) => {
+      const match = pairingDescriptions[name] || {
+        category: "pastry" as const,
+        description: "Artisan bakery treat prepared daily in our café kitchen.",
+        whyItWorks: "Selected specifically to balance the drink's sensory profile.",
+      };
+      return {
+        name,
+        category: match.category,
+        description: match.description,
+        whyItWorks: match.whyItWorks,
+        pairingPrice: priceMap[match.category] || 120,
+      };
+    });
+  }
+
+  /**
    * Validates a drink configuration, verifies all component existence and availability,
    * enforces beverage consistency rules, and computes authoritative server-side pricing.
    */

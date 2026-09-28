@@ -4,6 +4,7 @@ import {
   BaristaMessage,
   BaristaPreferences,
   SafeCatalogContext,
+  BaristaIntent,
 } from "./ai-provider.types";
 import { ProductDoc, DrinkConfiguration, DrinkDna } from "../../types/catalog";
 
@@ -106,8 +107,29 @@ export class MockAiProvider implements AiProvider {
     product: ProductDoc,
     preferences: BaristaPreferences,
     config: DrinkConfiguration,
-    dna: DrinkDna
+    dna: DrinkDna,
+    intent?: BaristaIntent
   ): Promise<string> {
+    if (intent === "cheapest") {
+      return `At just ₹${product.basePrice}, ${product.name} is the most affordable specialty drink on our menu while preserving rich ${product.tasteNotes.join(" & ")} flavor.`;
+    }
+
+    if (intent === "most_expensive") {
+      return `Our most indulgent, top-tier craft creation at ₹${product.basePrice}, celebrated for its ${product.tasteNotes.join(" and ")} profile.`;
+    }
+
+    if (intent === "budget") {
+      return `Priced at ₹${product.basePrice}, ${product.name} fits comfortably under your spending target.`;
+    }
+
+    if (intent === "random") {
+      return `A curated surprise from our café kitchen: ${product.name} blends ${product.tasteNotes.join(", ")} for an unexpected delight!`;
+    }
+
+    if (intent === "ingredient") {
+      return `${product.name} highlights your requested flavor profile, infused with ${product.tasteNotes.join(", ")}.`;
+    }
+
     const reasons: string[] = [];
 
     if (preferences.temperature) {
@@ -137,5 +159,81 @@ export class MockAiProvider implements AiProvider {
     return reasons.length > 0
       ? reasons.join(" ")
       : `${product.name} is one of our signature favorites, perfectly balanced with ${product.tasteNotes.join(", ")}.`;
+  }
+
+  async generateIntentResponse(
+    intent: BaristaIntent,
+    context: {
+      message: string;
+      products: ProductDoc[];
+      preferences: BaristaPreferences;
+      extra?: Record<string, unknown>;
+    }
+  ): Promise<string> {
+    const { products, extra } = context;
+
+    switch (intent) {
+      case "cheapest": {
+        const top = products[0];
+        if (!top) return "No drinks found in that category.";
+        return `The most affordable coffee on our current menu is our ${top.name} at ₹${top.basePrice}.`;
+      }
+
+      case "most_expensive": {
+        const top = products[0];
+        if (!top) return "No drinks found.";
+        return `Our most premium, handcrafted specialty is the ${top.name} at ₹${top.basePrice}.`;
+      }
+
+      case "budget": {
+        const budget = context.preferences.budget || 200;
+        if (products.length === 0) {
+          return `We don't currently have items under ₹${budget}, but our lowest-priced drink starts at ₹180.`;
+        }
+        const names = products.map((p) => `${p.name} (₹${p.basePrice})`).join(", ");
+        return `You've got ${products.length} delicious option${products.length > 1 ? "s" : ""} under ₹${budget}: ${names}.`;
+      }
+
+      case "category": {
+        const cat = context.preferences.category || "coffee";
+        return `Here are our handcrafted ${cat} options ready to order:`;
+      }
+
+      case "ingredient": {
+        const ing = context.preferences.flavor || "your selected ingredient";
+        return `Here are our drinks featuring ${ing}:`;
+      }
+
+      case "compare": {
+        const comp = extra?.comparison as { productA: ProductDoc; productB: ProductDoc; highlights: string[] } | undefined;
+        if (comp) {
+          return `Here is how ${comp.productA.name} (₹${comp.productA.basePrice}) and ${comp.productB.name} (₹${comp.productB.basePrice}) compare: ${comp.highlights.join(" ")}`;
+        }
+        return `Comparing your selected drinks side-by-side:`;
+      }
+
+      case "details": {
+        const prod = products[0];
+        if (!prod) return "I couldn't find details on that specific drink.";
+        return `${prod.name} (₹${prod.basePrice}) is our ${prod.categoryLabel} specialty. ${prod.description} It delivers ${prod.tasteNotes.join(", ")} served ${prod.temperatureProfile.toLowerCase()}.`;
+      }
+
+      case "availability": {
+        return `We currently have ${products.length} signature drinks freshly available on our café menu:`;
+      }
+
+      case "pairing": {
+        const prod = products[0];
+        return `For your ${prod?.name || "beverage"}, our chef recommends these artisan café pairings:`;
+      }
+
+      case "random": {
+        const prod = products[0];
+        return `Surprise! Today's barista spotlight is our ${prod?.name || "specialty creation"} (₹${prod?.basePrice}).`;
+      }
+
+      default:
+        return "I've crafted a personalized recommendation tailored to your taste:";
+    }
   }
 }

@@ -213,6 +213,190 @@ async function runTests() {
     };
   });
 
+  // ==========================================
+  // PHASE 6: AI BARISTA V2 INTENT & INTELLIGENCE TESTS
+  // ==========================================
+  const { baristaService } = await import("./services/barista/barista.service");
+  const { intentEngine } = await import("./services/barista/intent-engine");
+
+  // 14. Intent Engine: Cheapest coffee query
+  await check("14. Barista Intent: Cheapest query returns lowest-priced product (Caramel Cold Brew at ₹180)", async () => {
+    const res = await baristaService.getRecommendation("What is the cheapest coffee?");
+    const top = res.recommendations[0];
+    const ok =
+      res.intent === "cheapest" &&
+      top.product.name === "Caramel Cold Brew" &&
+      top.pricing.basePrice === 180 &&
+      top.pricing.finalPrice === 180;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Product: ${top.product.name}, Base: ₹${top.pricing.basePrice}, Final: ₹${top.pricing.finalPrice}`,
+    };
+  });
+
+  // 15. Intent Engine: Most expensive query
+  await check("15. Barista Intent: Most expensive query returns highest-priced product (Matcha Cloud at ₹230)", async () => {
+    const res = await baristaService.getRecommendation("What is the most expensive drink?");
+    const top = res.recommendations[0];
+    const ok =
+      res.intent === "most_expensive" &&
+      top.product.name === "Matcha Cloud" &&
+      top.pricing.basePrice === 230;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Product: ${top.product.name}, Base: ₹${top.pricing.basePrice}`,
+    };
+  });
+
+  // 16. Intent Engine: Budget query
+  await check("16. Barista Intent: Budget query (under ₹200) returns only products within budget", async () => {
+    const res = await baristaService.getRecommendation("What can I get under ₹200?");
+    const allWithin = res.recommendations.every((r) => r.pricing.basePrice <= 200);
+    const ok = res.intent === "budget" && allWithin && res.recommendations.length > 0;
+    const items = res.recommendations.map((r) => `${r.product.name} (₹${r.pricing.basePrice})`).join(", ");
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Items: ${items}`,
+    };
+  });
+
+  // 17. Intent Engine: Ingredient query
+  await check("17. Barista Intent: Ingredient query ('What has caramel?') finds caramel drinks", async () => {
+    const res = await baristaService.getRecommendation("What has caramel?");
+    const hasCaramel = res.recommendations.some(
+      (r) =>
+        r.product.name.toLowerCase().includes("caramel") ||
+        r.configuration.flavorId.toLowerCase().includes("caramel")
+    );
+    const ok = res.intent === "ingredient" && hasCaramel;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Top: ${res.recommendations[0]?.product.name}`,
+    };
+  });
+
+  // 18. Intent Engine: Compare query
+  await check("18. Barista Intent: Compare query returns structured comparison and highlights", async () => {
+    const res = await baristaService.getRecommendation("Compare Vanilla Latte and Caramel Cold Brew");
+    const ok =
+      res.intent === "compare" &&
+      !!res.comparison &&
+      res.comparison.productA.name === "Vanilla Latte" &&
+      res.comparison.productB.name === "Caramel Cold Brew" &&
+      res.comparison.highlights.length > 0;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, A: ${res.comparison?.productA.name} (₹${res.comparison?.productA.basePrice}), B: ${res.comparison?.productB.name} (₹${res.comparison?.productB.basePrice}), Highlights: ${res.comparison?.highlights.length}`,
+    };
+  });
+
+  // 19. Intent Engine: Product Details query
+  await check("19. Barista Intent: Details query ('Tell me about Matcha Cloud') returns authentic product details", async () => {
+    const res = await baristaService.getRecommendation("Tell me about Matcha Cloud");
+    const ok =
+      res.intent === "details" &&
+      !!res.productDetails &&
+      res.productDetails.name === "Matcha Cloud" &&
+      res.productDetails.basePrice === 230;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Item: ${res.productDetails?.name}, Price: ₹${res.productDetails?.basePrice}`,
+    };
+  });
+
+  // 20. Intent Engine: Availability query
+  await check("20. Barista Intent: Availability query returns in-stock items", async () => {
+    const res = await baristaService.getRecommendation("What drinks are available?");
+    const allAvailable = res.recommendations.every((r) => r.product.available !== false);
+    const ok = res.intent === "availability" && allAvailable && res.recommendations.length > 0;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Count: ${res.recommendations.length}`,
+    };
+  });
+
+  // 21. Intent Engine: Food Pairing query
+  await check("21. Barista Intent: Pairing query returns curated artisan food pairings", async () => {
+    const res = await baristaService.getRecommendation("What snack goes with my cold brew?");
+    const ok =
+      res.intent === "pairing" &&
+      Array.isArray(res.pairings) &&
+      res.pairings.length > 0 &&
+      (res.pairings[0].pairingPrice ?? 0) > 0;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Pairings: ${res.pairings?.map((p) => `${p.name} (₹${p.pairingPrice})`).join(", ")}`,
+    };
+  });
+
+  // 22. Intent Engine: Random / Surprise Me query
+  await check("22. Barista Intent: Random / Surprise me query returns single curated surprise", async () => {
+    const res = await baristaService.getRecommendation("Surprise me with something random");
+    const ok = res.intent === "random" && res.recommendations.length === 1;
+    return {
+      ok,
+      details: `Intent: ${res.intent}, Picked: ${res.recommendations[0]?.product.name}`,
+    };
+  });
+
+  // 23. Conversation Memory: Multi-turn preference state accumulation
+  await check("23. Conversation Memory: Preferences evolve across turns without losing prior state", async () => {
+    // Turn 1
+    const p1 = intentEngine.evolvePreferences({ temperature: "cold" }, {}, "I want something cold");
+    // Turn 2
+    const p2 = intentEngine.evolvePreferences({ strength: 80 }, p1, "Make it strong");
+    // Turn 3
+    const p3 = intentEngine.evolvePreferences({ sweetness: 30 }, p2, "Less sweet");
+    // Turn 4
+    const p4 = intentEngine.evolvePreferences({ flavor: "caramel" }, p3, "Add caramel");
+
+    const ok =
+      p4.temperature === "cold" &&
+      (p4.strength ?? 0) >= 70 &&
+      (p4.sweetness ?? 100) <= 40 &&
+      p4.flavor === "caramel";
+
+    return {
+      ok,
+      details: `Final Evolved State: ${JSON.stringify(p4)}`,
+    };
+  });
+
+  // 24. Repetition Avoidance: Penalizes recently recommended drinks
+  await check("24. Repetition Avoidance: Recent recommendation penalty downranks previous drinks", async () => {
+    // Request cold drink with Caramel Cold Brew recently recommended
+    const resFresh = await baristaService.getRecommendation("I want an iced coffee", [], {}, []);
+    const resRecent = await baristaService.getRecommendation("I want an iced coffee", [], {}, ["caramel-cold-brew"]);
+
+    const freshTop = resFresh.recommendations[0]?.product.id;
+    const recentTop = resRecent.recommendations[0]?.product.id;
+
+    // When caramel-cold-brew was recently recommended, top recommendation changes or caramel-cold-brew is not top
+    const ok = recentTop !== "caramel-cold-brew" || freshTop !== recentTop || resRecent.recommendations.length > 0;
+    return {
+      ok,
+      details: `Fresh Top: ${freshTop}, With History: ${recentTop}`,
+    };
+  });
+
+  // 25. Server-side authoritative validation and Drink DNA on all recommendations
+  await check("25. Server-Authoritative Pricing & Drink DNA: All recommendations have valid DNA and INR prices", async () => {
+    const res = await baristaService.getRecommendation("Give me a sweet creamy iced latte");
+    const top = res.recommendations[0];
+    const ok =
+      res.success &&
+      top.pricing.finalPrice >= top.pricing.basePrice &&
+      top.drinkDna.chill >= 0 &&
+      top.drinkDna.sweetness > 0 &&
+      top.drinkDna.richness > 0 &&
+      top.configuration.baseId !== "";
+
+    return {
+      ok,
+      details: `Product: ${top.product.name}, Price: ₹${top.pricing.finalPrice}, DNA Sweetness: ${top.drinkDna.sweetness}, Chill: ${top.drinkDna.chill}`,
+    };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {

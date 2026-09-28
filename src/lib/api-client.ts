@@ -68,7 +68,9 @@ export async function apiFetch<T = unknown>(
  */
 export async function recommendDrink(
   message: string,
-  conversation: Array<{ role: "user" | "assistant"; content: string }> = []
+  conversation: Array<{ role: "user" | "assistant"; content: string }> = [],
+  preferences?: import("@/types/barista").BaristaPreferences,
+  recentProductIds: string[] = []
 ): Promise<BaristaRecommendResponse> {
   const payload = {
     message,
@@ -76,6 +78,8 @@ export async function recommendDrink(
       role: m.role,
       content: m.content,
     })),
+    preferences: preferences || undefined,
+    recentProductIds: recentProductIds.length > 0 ? recentProductIds : undefined,
   };
 
   const response = await apiFetch<BaristaRecommendResponse>("/api/barista/recommend", {

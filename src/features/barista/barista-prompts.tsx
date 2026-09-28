@@ -11,33 +11,39 @@ interface BaristaPromptsProps {
 const PROMPT_CHIPS = [
   {
     icon: Zap,
-    category: "Energy Kick",
-    prompt: "I need high caffeine for deep work, something iced and not too sweet.",
-    shortLabel: "High Caffeine, Low Sweetness",
-  },
-  {
-    icon: Snowflake,
-    category: "Chilled Refreshment",
-    prompt: "A crisp, fruity iced beverage that is completely caffeine-free for a hot afternoon.",
-    shortLabel: "Fruity Caffeine-Free Cooler",
+    category: "Cheapest",
+    prompt: "What is the cheapest coffee?",
+    shortLabel: "Cheapest Coffee",
   },
   {
     icon: Heart,
-    category: "Sweet Indulgence",
-    prompt: "Something decadent with caramel and rich sweet cream, cold and dessert-like.",
-    shortLabel: "Caramel & Velvet Cream Treat",
-  },
-  {
-    icon: Leaf,
-    category: "Plant-Based Zen",
-    prompt: "A smooth iced ceremonial matcha crafted with oat milk and subtle balanced sweetness.",
-    shortLabel: "Matcha Cloud with Oat Milk",
+    category: "Budget",
+    prompt: "What can I get under ₹200?",
+    shortLabel: "Drinks Under ₹200",
   },
   {
     icon: Flame,
-    category: "Warm Comfort",
-    prompt: "A steaming, aromatic espresso latte with vanilla notes to keep me warm.",
-    shortLabel: "Cozy Steamed Vanilla Latte",
+    category: "Compare",
+    prompt: "Compare Vanilla Latte and Caramel Cold Brew",
+    shortLabel: "Compare Latte & Cold Brew",
+  },
+  {
+    icon: Leaf,
+    category: "Food Pairing",
+    prompt: "What snack goes with my cold brew?",
+    shortLabel: "Artisan Food Pairing",
+  },
+  {
+    icon: Sparkles,
+    category: "Surprise",
+    prompt: "Surprise me with something random!",
+    shortLabel: "Surprise Me",
+  },
+  {
+    icon: Snowflake,
+    category: "Chilled",
+    prompt: "I want an iced caramel drink with oat milk, not too sweet.",
+    shortLabel: "Iced Caramel Oat Drink",
   },
 ];
 

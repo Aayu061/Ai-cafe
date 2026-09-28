@@ -9,7 +9,12 @@ export async function recommendDrink(
 ): Promise<void> {
   try {
     const input = recommendationRequestSchema.parse(req.body);
-    const result = await baristaService.getRecommendation(input.message, input.conversation);
+    const result = await baristaService.getRecommendation(
+      input.message,
+      input.conversation,
+      input.preferences,
+      input.recentProductIds
+    );
 
     res.status(200).json(result);
   } catch (error) {

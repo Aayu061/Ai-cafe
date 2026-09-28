@@ -243,8 +243,13 @@ Customer Message: "${message}"`,
     product: ProductDoc,
     preferences: BaristaPreferences,
     config: DrinkConfiguration,
-    dna: DrinkDna
+    dna: DrinkDna,
+    intent?: import("./ai-provider.types").BaristaIntent
   ): Promise<string> {
+    if (intent && intent !== "recommend") {
+      return new MockAiProvider().generateExplanation(product, preferences, config, dna, intent);
+    }
+
     const reasons: string[] = [];
 
     if (preferences.temperature) {
@@ -270,5 +275,17 @@ Customer Message: "${message}"`,
     return reasons.length > 0
       ? reasons.join(" ")
       : `${product.name} is one of our specialty highlights, balancing ${product.tasteNotes.join(", ")}.`;
+  }
+
+  async generateIntentResponse(
+    intent: import("./ai-provider.types").BaristaIntent,
+    context: {
+      message: string;
+      products: ProductDoc[];
+      preferences: BaristaPreferences;
+      extra?: Record<string, unknown>;
+    }
+  ): Promise<string> {
+    return new MockAiProvider().generateIntentResponse(intent, context);
   }
 }
