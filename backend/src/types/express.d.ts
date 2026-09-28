@@ -1,4 +1,5 @@
 import type { DecodedIdToken } from "firebase-admin/auth";
+import type { UserRole, UserStatus } from "./roles";
 
 export interface AuthenticatedUser {
   uid: string;
@@ -6,7 +7,10 @@ export interface AuthenticatedUser {
   email_verified?: boolean;
   name?: string;
   picture?: string;
-  claims: DecodedIdToken;
+  role: UserRole;
+  status: UserStatus;
+  permissions?: string[];
+  claims?: DecodedIdToken;
 }
 
 declare global {

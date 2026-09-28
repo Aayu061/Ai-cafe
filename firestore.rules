@@ -12,9 +12,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Users Collection: Users can read and write only their own document
+    // Users Collection: Users can read and update only their own document.
+    // Self-promotion defense: Clients CANNOT alter role, status, or permissions.
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) 
+        && (!('role' in request.resource.data) || request.resource.data.role == 'customer')
+        && (!('status' in request.resource.data) || request.resource.data.status == 'active')
+        && (!('permissions' in request.resource.data) || request.resource.data.permissions.size() == 0);
+      allow update: if isOwner(userId) 
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'permissions']);
+      allow delete: if false; // Account deletion handled via backend/Admin SDK
     }
 
     // Products & Ingredients: Publicly readable by all, writable only by server/admin
@@ -28,17 +36,39 @@ service cloud.firestore {
       allow write: if false; // Only Admin SDK can modify ingredients
     }
 
+    // Operational Collections (Inventory, Movements, Recipes, Audit Logs):
+    // Direct client mutation is strictly forbidden; all state changes run through server-authoritative APIs.
+    match /inventory/{inventoryId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if false; // Read only via authorized admin API
+      allow write: if false;
+    }
+
+    match /recipes/{recipeId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if false; // Read only via authorized admin API
+      allow write: if false;
+    }
+
     // Carts: Only the owner can read/write their cart
     match /carts/{cartId} {
       allow read, write: if isAuthenticated() && request.auth.uid == resource.data.userId;
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
     }
 
-    // Orders: Users can view their own orders; creation is validated
+    // Orders: Users can view their own orders; state updates strictly managed via server
     match /orders/{orderId} {
       allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
-      allow update, delete: if false; // Order state updates managed via server
+      allow update, delete: if false; // Operational state updates managed via server
     }
 
     // Reviews: Publicly readable; only author can create

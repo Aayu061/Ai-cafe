@@ -8,6 +8,8 @@ import { healthRoutes } from "./routes/health.routes";
 import { userRoutes } from "./routes/user.routes";
 import { catalogRoutes } from "./routes/catalog.routes";
 import { baristaRoutes } from "./routes/barista.routes";
+import { staffRoutes } from "./routes/staff.routes";
+import { adminRoutes } from "./routes/admin.routes";
 
 export function createApp(): Express {
   const app = express();
@@ -46,6 +48,8 @@ export function createApp(): Express {
   app.use("/api", userRoutes);
   app.use("/api", catalogRoutes);
   app.use("/api/barista", baristaRoutes);
+  app.use("/api/staff", staffRoutes);
+  app.use("/api/admin", adminRoutes);
 
   // 5. 404 & Centralized Error Handlers
   app.use(notFoundHandler);

@@ -31,6 +31,23 @@ export function Navbar() {
 
   const displayName = userProfile?.displayName || user?.displayName || "Guest";
 
+  const role = userProfile?.role || "customer";
+
+  const navItems = React.useMemo(() => {
+    const items = [...NAV_ITEMS];
+    if (role === "staff") {
+      items.push({ label: "Staff Hub", href: "/staff", badge: "STAFF" });
+    } else if (role === "admin" || role === "super_admin") {
+      items.push({ label: "Staff Hub", href: "/staff" });
+      items.push({
+        label: "Admin Portal",
+        href: "/admin",
+        badge: role === "super_admin" ? "SUPER" : "ADMIN",
+      });
+    }
+    return items;
+  }, [role]);
+
   return (
     <>
       <header
@@ -80,7 +97,7 @@ export function Navbar() {
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-8">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
@@ -157,6 +174,11 @@ export function Navbar() {
                   >
                     <User className="w-3.5 h-3.5 text-caramel" />
                     <span className="max-w-[100px] truncate">{displayName.split(" ")[0]}</span>
+                    {role !== "customer" && (
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-caramel/25 text-caramel border border-caramel/30">
+                        {role === "super_admin" ? "Super" : role.toUpperCase()}
+                      </span>
+                    )}
                   </Button>
                 </Link>
 
@@ -228,7 +250,7 @@ export function Navbar() {
             className="fixed inset-x-0 top-[68px] z-40 bg-cream-light/95 backdrop-blur-xl border-b border-espresso/10 p-6 shadow-floating sm:hidden"
           >
             <nav className="flex flex-col gap-4">
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.label}
                   href={item.href}

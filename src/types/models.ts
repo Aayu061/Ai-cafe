@@ -3,6 +3,9 @@
  * Clean, extensible interfaces for future application phases.
  */
 
+export type UserRole = "customer" | "staff" | "admin" | "super_admin";
+export type UserStatus = "active" | "suspended";
+
 export interface UserDocument {
   uid: string;
   displayName: string;
@@ -10,12 +13,31 @@ export interface UserDocument {
   photoURL: string | null;
   createdAt: string; // ISO 8601 string or Timestamp
   updatedAt: string;
-  role?: "customer" | "admin" | "barista";
+  lastLoginAt?: string;
+  role: UserRole;
+  status?: UserStatus;
+  permissions?: string[];
+  tasteProfile?: {
+    favoriteBases?: string[];
+    preferredMilk?: string;
+    sweetnessPreference?: number;
+    preferredTemperature?: "hot" | "cold" | "blended";
+  };
   preferences?: {
     favoriteBases?: string[];
     preferredMilk?: string;
     sweetnessPreference?: number;
   };
+  favorites?: string[];
+  savedCreations?: Array<{
+    id: string;
+    name: string;
+    base: string;
+    milk: string;
+    sweetness: number;
+    flavor?: string;
+    createdAt: string;
+  }>;
 }
 
 export interface Product {
@@ -74,7 +96,11 @@ export type OrderStatus =
   | "brewing"
   | "ready"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "new"
+  | "preparing";
+
+export type OrderDoc = Order;
 
 export interface OrderItem {
   productId: string;
@@ -118,13 +144,58 @@ export interface Favorite {
   createdAt: string;
 }
 
+export type InventoryUnit = "ml" | "g" | "kg" | "l" | "pcs";
+export type InventoryStatus = "in_stock" | "low_stock" | "out_of_stock";
+export type InventoryMovementType = "purchase" | "adjustment" | "waste" | "correction" | "order_consumption";
+
 export interface InventoryItem {
-  ingredientId: string;
+  id: string;
   name: string;
-  quantityOnHand: number;
-  unit: "g" | "ml" | "units";
+  ingredientId: string;
+  quantity: number;
+  unit: InventoryUnit;
   reorderThreshold: number;
-  lastRestocked: string;
+  status: InventoryStatus;
+  createdAt?: string;
+  updatedAt?: string;
+  lastRestocked?: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  inventoryId: string;
+  type: InventoryMovementType;
+  quantity: number;
+  unit: InventoryUnit;
+  reason: string;
+  referenceId?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface RecipeIngredient {
+  ingredientId: string;
+  quantity: number;
+  unit: InventoryUnit;
+}
+
+export interface Recipe {
+  id: string;
+  productId: string;
+  ingredients: RecipeIngredient[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  actorId: string;
+  actorRole: UserRole;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface AIRecommendation {

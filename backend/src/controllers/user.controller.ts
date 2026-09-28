@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import { userService } from "../services/user.service";
 
 export async function getMe(req: Request, res: Response): Promise<void> {
-  // req.user is guaranteed by auth.middleware
   const user = req.user!;
 
   res.status(200).json({
@@ -12,6 +11,9 @@ export async function getMe(req: Request, res: Response): Promise<void> {
       email: user.email || null,
       name: user.name || null,
       picture: user.picture || null,
+      role: user.role,
+      status: user.status,
+      permissions: user.permissions || [],
     },
   });
 }
@@ -40,6 +42,29 @@ export async function getMyProfile(
     res.status(200).json({
       success: true,
       profile,
+    });
+  } catch (error: unknown) {
+    next(error);
+  }
+}
+
+export async function updateMyProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const user = req.user!;
+
+  try {
+    const updates = req.body || {};
+
+    // Customer updating own profile is unprivileged: Cannot self-promote role or status
+    const updated = await userService.updateUserProfile(user.uid, updates, false);
+
+    res.status(200).json({
+      success: true,
+      user: updated,
+      profile: updated,
     });
   } catch (error: unknown) {
     next(error);

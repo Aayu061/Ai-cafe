@@ -1,3 +1,5 @@
+process.env.NODE_ENV = "test";
+
 import http from "http";
 import { app } from "./app";
 
@@ -397,6 +399,237 @@ async function runTests() {
     };
   });
 
+  // ============================================================
+  // PHASE 7: IDENTITY, ROLES & CAFÉ OPERATIONS VERIFICATION
+  // ============================================================
+
+  // 26. Customer cannot access staff API -> 403 FORBIDDEN
+  await check("26. Customer Role Security: Customer cannot access Staff Orders API", async () => {
+    const res = await fetch(`${baseUrl}/api/staff/orders`, {
+      headers: { Authorization: "Bearer test-token-customer" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 27. Customer cannot access admin API -> 403 FORBIDDEN
+  await check("27. Customer Role Security: Customer cannot access Admin Products API", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/products`, {
+      headers: { Authorization: "Bearer test-token-customer" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 28. Staff can access staff orders -> 200 OK
+  await check("28. Staff Role Authorization: Staff can access operational orders queue", async () => {
+    const res = await fetch(`${baseUrl}/api/staff/orders`, {
+      headers: { Authorization: "Bearer test-token-staff" },
+    });
+    const body = (await res.json()) as { success: boolean; orders: unknown[]; count: number };
+    const ok = res.status === 200 && body.success === true && Array.isArray(body.orders);
+    return { ok, details: `Status: ${res.status}, Count: ${body.count}` };
+  });
+
+  // 29. Staff can access operational inventory & low stock warnings -> 200 OK
+  await check("29. Staff Operational Inventory: Staff can access inventory and low-stock alerts", async () => {
+    const res = await fetch(`${baseUrl}/api/staff/inventory`, {
+      headers: { Authorization: "Bearer test-token-staff" },
+    });
+    const body = (await res.json()) as { success: boolean; inventory: unknown[]; lowStockAlerts: unknown[] };
+    const ok = res.status === 200 && body.success === true && Array.isArray(body.inventory);
+    return { ok, details: `Status: ${res.status}, Total: ${body.inventory.length}, Alerts: ${body.lowStockAlerts.length}` };
+  });
+
+  // 30. Staff cannot access admin-only endpoints -> 403 FORBIDDEN
+  await check("30. Role Isolation: Staff cannot access Admin Products API", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/products`, {
+      headers: { Authorization: "Bearer test-token-staff" },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 31. Staff cannot adjust inventory -> 403 FORBIDDEN
+  await check("31. Role Isolation: Staff cannot execute Admin stock adjustments", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/inventory/adjust`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-staff",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inventoryId: "inv-cold-brew",
+        quantityDelta: 100,
+        type: "adjustment",
+        reason: "Unauthorized attempt",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string } };
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 32. Admin can access admin products -> 200 OK
+  await check("32. Admin Role Authorization: Admin can access full products catalog", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/products`, {
+      headers: { Authorization: "Bearer test-token-admin" },
+    });
+    const body = (await res.json()) as { success: boolean; products: unknown[] };
+    const ok = res.status === 200 && body.success === true && Array.isArray(body.products);
+    return { ok, details: `Status: ${res.status}, Total Products: ${body.products.length}` };
+  });
+
+  // 33. Admin can access admin inventory management -> 200 OK
+  await check("33. Admin Role Authorization: Admin can access inventory management and stock levels", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/inventory`, {
+      headers: { Authorization: "Bearer test-token-admin" },
+    });
+    const body = (await res.json()) as { success: boolean; inventory: unknown[] };
+    const ok = res.status === 200 && body.success === true && Array.isArray(body.inventory);
+    return { ok, details: `Status: ${res.status}, Items: ${body.inventory.length}` };
+  });
+
+  // 34. Admin stock adjustment derives status and logs movement -> 200 OK
+  await check("34. Inventory Foundation: Stock adjustment updates inventory, derives status, and logs movement", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/inventory/adjust`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inventoryId: "inv-cold-brew",
+        quantityDelta: -2.5,
+        type: "waste",
+        reason: "Test batch quality discard",
+      }),
+    });
+    const body = (await res.json()) as {
+      success: boolean;
+      item: { name: string; quantity: number; status: string };
+      movement: { type: string; quantity: number; reason: string };
+    };
+    const ok =
+      res.status === 200 &&
+      body.success === true &&
+      body.item.quantity > 0 &&
+      body.movement.type === "waste" &&
+      body.item.status === "in_stock";
+    return {
+      ok,
+      details: `Status: ${res.status}, Item: ${body.item?.name}, Qty: ${body.item?.quantity}, Derived Status: ${body.item?.status}`,
+    };
+  });
+
+  // 35. Admin product availability toggle -> 200 OK
+  await check("35. Catalog Security: Admin can toggle product availability with audit logging", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/products/caramel-cold-brew/availability`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer test-token-admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ available: true }),
+    });
+    const body = (await res.json()) as { success: boolean; product: { id: string; available: boolean } };
+    const ok = res.status === 200 && body.success === true && body.product?.available === true;
+    return { ok, details: `Status: ${res.status}, Product: ${body.product?.id}, Available: ${body.product?.available}` };
+  });
+
+  // 36. Suspended account block -> 403 ACCOUNT_SUSPENDED
+  await check("36. Account Security: Suspended user accounts are rejected across all protected endpoints", async () => {
+    const res = await fetch(`${baseUrl}/api/me`, {
+      headers: {
+        Authorization: "Bearer test-token-customer",
+        "x-test-status": "suspended",
+      },
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string } };
+    const ok = res.status === 403 && body.error?.code === "ACCOUNT_SUSPENDED";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 37. Self-promotion defense -> Role cannot be modified by customer
+  await check("37. Self-Promotion Defense: Updating profile as customer strips role, status, and permissions", async () => {
+    const res = await fetch(`${baseUrl}/api/users/me`, {
+      method: "PATCH",
+      headers: {
+        Authorization: "Bearer test-token-customer",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        displayName: "Hacked Customer",
+        role: "admin",
+        status: "active",
+        permissions: ["catalog.delete", "admin.access"],
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; user: { role: string; displayName: string } };
+    const ok = res.status === 200 && body.user.role === "customer" && body.user.displayName === "Hacked Customer";
+    return { ok, details: `Status: ${res.status}, Name: ${body.user?.displayName}, Role: ${body.user?.role}` };
+  });
+
+  // 38. Super Admin can manage staff roles -> 200 OK
+  await check("38. Super Admin Authority: Super Admin can assign staff roles", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/staff/role`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-super_admin",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        targetUid: "barista-emp-01",
+        role: "staff",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; user: { uid: string; role: string } };
+    const ok = res.status === 200 && body.success === true && body.user?.role === "staff";
+    return { ok, details: `Status: ${res.status}, Target: ${body.user?.uid}, Assigned: ${body.user?.role}` };
+  });
+
+  // 39. Audit log trail captures actions -> 200 OK
+  await check("39. Audit Log Architecture: Administrative actions create structured audit records", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/audit-logs`, {
+      headers: { Authorization: "Bearer test-token-admin" },
+    });
+    const body = (await res.json()) as { success: boolean; logs: Array<{ action: string; actorRole: string }>; count: number };
+    const ok = res.status === 200 && body.success === true && body.count > 0;
+    const actions = body.logs?.map((l) => l.action).slice(0, 3).join(", ");
+    return { ok, details: `Status: ${res.status}, Log Count: ${body.count}, Recent: [${actions}]` };
+  });
+
+  // 40. Authentic Analytics: Zero fabricated metrics -> 200 OK
+  await check("40. Authentic Metrics: Analytics reports exact figures and zero artificial sales/revenue", async () => {
+    const res = await fetch(`${baseUrl}/api/admin/analytics`, {
+      headers: { Authorization: "Bearer test-token-admin" },
+    });
+    const body = (await res.json()) as {
+      success: boolean;
+      analytics: {
+        totalOrders: number;
+        totalInventoryItems: number;
+        lowStockCount: number;
+        activeProductsCount: number;
+        hasOrderHistory: boolean;
+      };
+    };
+    const ok =
+      res.status === 200 &&
+      body.success === true &&
+      body.analytics.totalOrders >= 0 &&
+      body.analytics.activeProductsCount > 0 &&
+      body.analytics.totalInventoryItems > 0 &&
+      body.analytics.hasOrderHistory === false; // Zero fabricated orders
+    return {
+      ok,
+      details: `Status: ${res.status}, Active Products: ${body.analytics?.activeProductsCount}, Inventory: ${body.analytics?.totalInventoryItems}, Has Orders: ${body.analytics?.hasOrderHistory}`,
+    };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {
@@ -414,3 +647,4 @@ runTests().catch((err) => {
   console.error("Test execution failed:", err);
   process.exit(1);
 });
+

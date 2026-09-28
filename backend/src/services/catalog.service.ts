@@ -7,14 +7,18 @@ import {
   DrinkValidationResult,
   DrinkDna,
 } from "../types/catalog";
+import { UserRole } from "../types/roles";
+import { auditService } from "./operations/audit.service";
 
 export class CatalogService {
+  private memoryProducts: ProductDoc[] = [...INITIAL_PRODUCTS];
+
   /**
    * Reads products from Cloud Firestore when configured, or INITIAL_PRODUCTS for local dev.
    */
   async getProducts(category?: string, featured?: boolean): Promise<ProductDoc[]> {
     if (!isFirebaseAdminConfigured()) {
-      let prods = INITIAL_PRODUCTS;
+      let prods = this.memoryProducts;
       if (category) prods = prods.filter((p) => p.category === category);
       if (typeof featured === "boolean") prods = prods.filter((p) => p.featured === featured);
       return prods;
@@ -607,6 +611,108 @@ export class CatalogService {
       configuration: normalizedConfig,
       drinkDna,
     };
+  }
+
+  /**
+   * Admin: Creates a new product in the catalog and logs audit action.
+   */
+  async createProduct(
+    productData: ProductDoc,
+    actorId: string,
+    actorRole: UserRole
+  ): Promise<ProductDoc> {
+    const product: ProductDoc = {
+      ...productData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.memoryProducts.push(product);
+
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const db = getFirebaseAdminDb();
+        await db.collection("products").doc(product.id).set(product);
+      } catch (err) {
+        console.warn("[CatalogService]: Firestore write failed:", (err as Error).message);
+      }
+    }
+
+    await auditService.logAction({
+      actorId,
+      actorRole,
+      action: "PRODUCT_CREATED",
+      resourceType: "product",
+      resourceId: product.id,
+      metadata: { name: product.name, basePrice: product.basePrice, category: product.category },
+    });
+
+    return product;
+  }
+
+  /**
+   * Admin: Updates an existing product (e.g. price, description, pairings, availability) and logs audit action.
+   */
+  async updateProduct(
+    id: string,
+    updates: Partial<ProductDoc>,
+    actorId: string,
+    actorRole: UserRole
+  ): Promise<ProductDoc> {
+    const existing = await this.getProductByIdOrSlug(id);
+    if (!existing) {
+      throw new Error(`Product "${id}" not found.`);
+    }
+
+    const updated: ProductDoc = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const idx = this.memoryProducts.findIndex((p) => p.id === existing.id);
+    if (idx !== -1) {
+      this.memoryProducts[idx] = updated;
+    } else {
+      this.memoryProducts.push(updated);
+    }
+
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const db = getFirebaseAdminDb();
+        await db.collection("products").doc(existing.id).set(updated, { merge: true });
+      } catch (err) {
+        console.warn("[CatalogService]: Firestore update failed:", (err as Error).message);
+      }
+    }
+
+    await auditService.logAction({
+      actorId,
+      actorRole,
+      action: "PRODUCT_UPDATED",
+      resourceType: "product",
+      resourceId: existing.id,
+      metadata: {
+        previousPrice: existing.basePrice,
+        newPrice: updated.basePrice,
+        priceChanged: existing.basePrice !== updated.basePrice,
+        availabilityChanged: existing.available !== updated.available,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Admin: Toggles product availability and logs audit action.
+   */
+  async setProductAvailability(
+    id: string,
+    available: boolean,
+    actorId: string,
+    actorRole: UserRole
+  ): Promise<ProductDoc> {
+    return this.updateProduct(id, { available }, actorId, actorRole);
   }
 }
 
