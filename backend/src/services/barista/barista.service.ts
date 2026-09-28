@@ -1,4 +1,5 @@
 import { catalogService } from "../catalog.service";
+import { baristaToolsService } from "./barista-tools.service";
 import { getAiProvider } from "../ai/ai-provider";
 import { intentEngine } from "./intent-engine";
 import {
@@ -10,20 +11,28 @@ import {
   BaristaIntent,
   BaristaComparisonItem,
   BaristaPairingItem,
+  BaristaResponseMode,
+  BaristaCatalogProduct,
+  CafeMomentCombo,
+  BaristaMoodContext,
 } from "../ai/ai-provider.types";
 import { ProductDoc, DrinkConfiguration } from "../../types/catalog";
 
 export class BaristaService {
   /**
-   * Generates a grounded, server-validated drink recommendation with intent intelligence.
+   * Generates a grounded, server-validated response with concierge intelligence,
+   * structured response modes, semantic natural-language understanding,
+   * multi-turn preferences, and controlled server-side tools.
    */
   async getRecommendation(
     message: string,
     conversationHistory: BaristaMessage[] = [],
     incomingPreferences?: BaristaPreferences,
-    recentProductIds: string[] = []
+    recentProductIds: string[] = [],
+    authenticatedUserId?: string,
+    activeProductId?: string
   ): Promise<BaristaRecommendResponse> {
-    // 1. Fetch live catalog
+    // 1. Fetch live catalog via server-authoritative service
     const [allProducts, allIngredients] = await Promise.all([
       catalogService.getProducts(),
       catalogService.getIngredients(),
@@ -33,6 +42,7 @@ export class BaristaService {
     if (availableProducts.length === 0) {
       return {
         success: false,
+        mode: "CONVERSATION",
         intent: "recommend",
         message: "Our café menu is currently updating. Please check back in a few moments!",
         preferences: {},
@@ -40,15 +50,55 @@ export class BaristaService {
       };
     }
 
-    // 2. Classify intent deterministically
+    // 2. Classify intent, response mode, mood context, and pronoun references
     const intentResult = intentEngine.classifyIntent(
       message,
       conversationHistory,
-      availableProducts
+      availableProducts,
+      recentProductIds,
+      activeProductId
     );
     const intent: BaristaIntent = intentResult.intent;
+    const mode: BaristaResponseMode = intentResult.mode;
+    const moodContext: BaristaMoodContext | undefined = intentResult.moodContext;
 
-    // 3. Build safe catalog context for AI model
+    // Handle rejection tracking ("not that one", "try something else")
+    const rejectedProductIds: string[] = [];
+    if (intentResult.referenceResolution?.action === "reject" && intentResult.referenceResolution.resolvedProductId) {
+      rejectedProductIds.push(intentResult.referenceResolution.resolvedProductId);
+    }
+
+    // 3. Handle GREETING mode immediately
+    if (mode === "GREETING") {
+      return {
+        success: true,
+        mode: "GREETING",
+        intent: "recommend",
+        message:
+          "Welcome to AI Café! I'm your café concierge. Tell me what you're craving today, how much caffeine you need, or ask me anything about our specialty menu!",
+        preferences: incomingPreferences || {},
+        moodContext,
+        recommendations: [],
+        followUpSuggestion: "Would you like something cold and energizing, or a warm comfort latte?",
+      };
+    }
+
+    // 4. Handle CONVERSATION mode
+    if (mode === "CONVERSATION") {
+      return {
+        success: true,
+        mode: "CONVERSATION",
+        intent: "recommend",
+        message:
+          "I am your dedicated AI Café Barista & Concierge. I know our entire handcrafted menu, ingredients, and pairings. I'm here to recommend, customize, compare, and ensure every drink is tailored precisely to your taste.",
+        preferences: incomingPreferences || {},
+        moodContext,
+        recommendations: [],
+        followUpSuggestion: "Shall I suggest our most popular iced creation or check what's fresh on tap?",
+      };
+    }
+
+    // 5. Build safe catalog context for AI model
     const safeContext: SafeCatalogContext = {
       products: availableProducts.map((p) => ({
         id: p.id,
@@ -72,7 +122,7 @@ export class BaristaService {
       availableSizes: allIngredients.filter((i) => i.type === "size" && i.available).map((i) => i.id),
     };
 
-    // 4. Extract sensory preferences and evolve multi-turn state
+    // 6. Extract sensory preferences and evolve multi-turn state
     const ai = getAiProvider();
     const extraction = await ai.extractPreferences(
       message,
@@ -87,31 +137,56 @@ export class BaristaService {
       message
     );
 
+    // Apply mood context adjustments to preferences if not explicitly set
+    if (moodContext) {
+      if (moodContext === "REFRESH" && !evolvedPrefs.temperature) evolvedPrefs.temperature = "cold";
+      if (moodContext === "ENERGIZE" && typeof evolvedPrefs.strength !== "number") evolvedPrefs.strength = 80;
+      if (moodContext === "COMFORT" && !evolvedPrefs.temperature) evolvedPrefs.temperature = "hot";
+      if (moodContext === "INDULGE" && typeof evolvedPrefs.sweetness !== "number") evolvedPrefs.sweetness = 75;
+    }
+
     if (intentResult.extractedBudget) evolvedPrefs.budget = intentResult.extractedBudget;
     if (intentResult.extractedCategory) evolvedPrefs.category = intentResult.extractedCategory;
     if (intentResult.extractedIngredient) evolvedPrefs.flavor = intentResult.extractedIngredient;
+
+    // Optional customer taste profile integration
+    if (authenticatedUserId) {
+      try {
+        const tasteProfile = await baristaToolsService.getOwnTasteProfile(authenticatedUserId);
+        if (tasteProfile && typeof tasteProfile === "object") {
+          const tp = tasteProfile as Record<string, unknown>;
+          if (tp.preferredMilk && !evolvedPrefs.milk) evolvedPrefs.milk = String(tp.preferredMilk);
+        }
+      } catch {
+        // Safe fallback; guest experience
+      }
+    }
 
     let candidateProducts: ProductDoc[] = [];
     let customGreeting: string | undefined;
     let comparisonData: BaristaComparisonItem | undefined;
     let productDetails: ProductDoc | undefined;
     let pairingsData: BaristaPairingItem[] | undefined;
+    let cafeMomentCombo: CafeMomentCombo | undefined;
+    let resolvedActiveId: string | undefined = activeProductId;
 
-    // 5. Deterministic Catalog Query Layer (Catalog is Source of Truth)
+    // 7. Execute Controlled Backend Tools based on Intent & Mode
     switch (intent) {
       case "cheapest": {
-        const cheapest = await catalogService.findCheapest(intentResult.extractedCategory);
+        const cheapest = await baristaToolsService.findCheapest(intentResult.extractedCategory);
         if (cheapest) {
           candidateProducts = [cheapest];
+          resolvedActiveId = cheapest.id;
           customGreeting = `The lowest-priced ${intentResult.extractedCategory || "specialty beverage"} on our current menu is our ${cheapest.name} at ₹${cheapest.basePrice}.`;
         }
         break;
       }
 
       case "most_expensive": {
-        const priciest = await catalogService.findMostExpensive(intentResult.extractedCategory);
+        const priciest = await baristaToolsService.findMostExpensive(intentResult.extractedCategory);
         if (priciest) {
           candidateProducts = [priciest];
+          resolvedActiveId = priciest.id;
           customGreeting = `Our most luxurious, top-tier handcrafted creation is the ${priciest.name} at ₹${priciest.basePrice}.`;
         }
         break;
@@ -119,44 +194,69 @@ export class BaristaService {
 
       case "budget": {
         const budgetTarget = intentResult.extractedBudget || evolvedPrefs.budget || 200;
-        const matching = await catalogService.findWithinBudget(budgetTarget, intentResult.extractedCategory);
-        candidateProducts = matching.slice(0, 3);
-        if (candidateProducts.length > 0) {
-          const names = candidateProducts.map((p) => `${p.name} (₹${p.basePrice})`).join(", ");
-          customGreeting = `You've got great choices under ₹${budgetTarget}: ${names}.`;
+
+        if (mode === "BUDGET_COMBO" || intentResult.isBudgetCombo) {
+          // Complete Café Moment: Drink + Snack <= budgetTarget
+          const combo = await baristaToolsService.buildCafeMomentCombo(
+            intentResult.referenceResolution?.resolvedProductId || resolvedActiveId,
+            budgetTarget,
+            intentResult.extractedCategory
+          );
+          if (combo) {
+            cafeMomentCombo = combo;
+            const drinkDoc = await baristaToolsService.getProduct(combo.drink.id);
+            if (drinkDoc) candidateProducts = [drinkDoc];
+            resolvedActiveId = combo.drink.id;
+            customGreeting = `For your ₹${budgetTarget} budget, I've paired our ${combo.drink.name} (₹${combo.drink.price}) with freshly baked ${combo.snack.name} (₹${combo.snack.price}) for a total of ₹${combo.totalPrice}.`;
+          }
         } else {
-          const cheapest = await catalogService.findCheapest();
-          customGreeting = `We don't currently have items under ₹${budgetTarget}. Our most affordable specialty drink is ${cheapest?.name} at ₹${cheapest?.basePrice}.`;
-          if (cheapest) candidateProducts = [cheapest];
+          // Catalog budget query
+          const matching = await baristaToolsService.findWithinBudget(budgetTarget, intentResult.extractedCategory);
+          candidateProducts = matching.slice(0, 3);
+          if (candidateProducts.length > 0) {
+            const names = candidateProducts.map((p) => `${p.name} (₹${p.basePrice})`).join(", ");
+            resolvedActiveId = candidateProducts[0].id;
+            customGreeting = `You've got great choices under ₹${budgetTarget}: ${names}.`;
+          } else {
+            const cheapest = await baristaToolsService.findCheapest();
+            customGreeting = `We don't currently have items under ₹${budgetTarget}. Our most affordable specialty drink is ${cheapest?.name} at ₹${cheapest?.basePrice}.`;
+            if (cheapest) {
+              candidateProducts = [cheapest];
+              resolvedActiveId = cheapest.id;
+            }
+          }
         }
         break;
       }
 
       case "category": {
         const cat = intentResult.extractedCategory || evolvedPrefs.category || "coffee";
-        const matching = await catalogService.findByCategory(cat);
+        const matching = await baristaToolsService.findByCategory(cat);
         candidateProducts = matching.slice(0, 3);
+        if (candidateProducts.length > 0) resolvedActiveId = candidateProducts[0].id;
         customGreeting = `Here are our handcrafted ${cat} creations ready to order:`;
         break;
       }
 
       case "ingredient": {
         const ing = intentResult.extractedIngredient || evolvedPrefs.flavor || "caramel";
-        const matching = await catalogService.findByIngredient(ing);
+        const matching = await baristaToolsService.findByIngredient(ing);
         candidateProducts = matching.slice(0, 3);
+        if (candidateProducts.length > 0) resolvedActiveId = candidateProducts[0].id;
         customGreeting = `Here are our café drinks crafted with ${ing}:`;
         break;
       }
 
       case "compare": {
         if (intentResult.comparisonTargets) {
-          const comp = await catalogService.compareProducts(
+          const comp = await baristaToolsService.compareProducts(
             intentResult.comparisonTargets[0],
             intentResult.comparisonTargets[1]
           );
           if (comp) {
             candidateProducts = [comp.productA, comp.productB];
             comparisonData = comp;
+            resolvedActiveId = comp.productA.id;
             customGreeting = `Comparing ${comp.productA.name} (₹${comp.productA.basePrice}) and ${comp.productB.name} (₹${comp.productB.basePrice}): ${comp.highlights.join(" ")}`;
           }
         }
@@ -164,11 +264,17 @@ export class BaristaService {
       }
 
       case "details": {
-        const targetId = intentResult.detailsTargetId || extraction.suggestedProductId || availableProducts[0].id;
-        const item = await catalogService.getProductByIdOrSlug(targetId);
+        const targetId =
+          intentResult.detailsTargetId ||
+          intentResult.referenceResolution?.resolvedProductId ||
+          extraction.suggestedProductId ||
+          resolvedActiveId ||
+          availableProducts[0].id;
+        const item = await baristaToolsService.getProduct(targetId);
         if (item) {
           candidateProducts = [item];
           productDetails = item;
+          resolvedActiveId = item.id;
           customGreeting = `${item.name} (₹${item.basePrice}) is our signature ${item.categoryLabel} highlight. ${item.description}`;
         }
         break;
@@ -177,42 +283,82 @@ export class BaristaService {
       case "availability": {
         const available = await catalogService.findAvailable();
         candidateProducts = available.slice(0, 4);
+        if (candidateProducts.length > 0) resolvedActiveId = candidateProducts[0].id;
         customGreeting = `We currently have ${available.length} specialty drinks freshly available on our café menu:`;
         break;
       }
 
       case "pairing": {
-        const targetId = intentResult.pairingTargetId || extraction.suggestedProductId || "caramel-cold-brew";
-        const item = (await catalogService.getProductByIdOrSlug(targetId)) || availableProducts[0];
+        const targetId =
+          intentResult.pairingTargetId ||
+          intentResult.referenceResolution?.resolvedProductId ||
+          resolvedActiveId ||
+          extraction.suggestedProductId ||
+          "caramel-cold-brew";
+        const item = (await baristaToolsService.getProduct(targetId)) || availableProducts[0];
         if (item) {
           candidateProducts = [item];
-          pairingsData = await catalogService.findPairings(item.id);
+          pairingsData = await baristaToolsService.findPairings(item.id);
+          resolvedActiveId = item.id;
           customGreeting = `For your ${item.name}, our chef recommends these artisan café pairings:`;
         }
         break;
       }
 
       case "random": {
-        // Filter out recently recommended products to avoid repetition
-        const freshChoices = availableProducts.filter((p) => !recentProductIds.includes(p.id));
-        const pool = freshChoices.length > 0 ? freshChoices : availableProducts;
-        const picked = pool[Math.floor(Math.random() * pool.length)];
+        // Contextual surprise (NOT pure Math.random):
+        // Filter out recently recommended and rejected products
+        const avoidedIds = new Set([...recentProductIds, ...rejectedProductIds]);
+        let freshPool = availableProducts.filter((p) => !avoidedIds.has(p.id));
+        if (freshPool.length === 0) {
+          freshPool = availableProducts.filter((p) => !rejectedProductIds.includes(p.id));
+        }
+        if (freshPool.length === 0) freshPool = availableProducts;
+
+        // Rank remaining pool by subtle sensory fit without matching the exact previous drink
+        const ranked = this.rankProducts(
+          freshPool,
+          evolvedPrefs,
+          undefined,
+          Array.from(avoidedIds),
+          message,
+          moodContext
+        );
+        const picked = ranked[0]?.product || freshPool[0];
         candidateProducts = [picked];
-        customGreeting = `Surprise! Today's barista spotlight is our ${picked.name} (₹${picked.basePrice}).`;
+        resolvedActiveId = picked.id;
+        customGreeting = `A curated barista surprise! I selected our ${picked.name} (₹${picked.basePrice}) featuring ${picked.tasteNotes.join(", ")}.`;
         break;
       }
 
-      case "customize":
+      case "customize": {
+        // If a specific drink was being discussed or modified ("make it strong", "make that iced", "less sweet")
+        const targetId =
+          intentResult.referenceResolution?.resolvedProductId ||
+          resolvedActiveId ||
+          extraction.suggestedProductId ||
+          recentProductIds[0] ||
+          availableProducts[0].id;
+
+        const targetProduct = (await baristaToolsService.getProduct(targetId)) || availableProducts[0];
+        candidateProducts = [targetProduct];
+        resolvedActiveId = targetProduct.id;
+        customGreeting = `I've updated your ${targetProduct.name} recipe according to your specifications.`;
+        break;
+      }
+
       case "recommend":
       default: {
         const ranked = this.rankProducts(
           availableProducts,
           evolvedPrefs,
           extraction.suggestedProductId,
-          recentProductIds,
-          message
+          [...recentProductIds, ...rejectedProductIds],
+          message,
+          moodContext
         );
         candidateProducts = ranked.slice(0, 3).map((r) => r.product);
+        if (candidateProducts.length > 0) resolvedActiveId = candidateProducts[0].id;
         break;
       }
     }
@@ -220,13 +366,24 @@ export class BaristaService {
     // Fallback if query returned no candidates
     if (candidateProducts.length === 0) {
       candidateProducts = availableProducts.slice(0, 3);
+      resolvedActiveId = candidateProducts[0]?.id;
     }
 
-    // 6. Build and Authoritatively Validate Candidate Drink Configurations
+    // 8. Build and Authoritatively Validate Candidate Drink Configurations
     const recommendations: BaristaRecommendation[] = [];
 
     for (const product of candidateProducts) {
-      const config = this.buildCandidateConfiguration(product, evolvedPrefs, safeContext, intent);
+      // Check availability tool
+      const availCheck = await baristaToolsService.checkAvailability(product.id);
+      const isAvailable = availCheck.available;
+
+      const config = this.buildCandidateConfiguration(
+        product,
+        evolvedPrefs,
+        safeContext,
+        intent,
+        message
+      );
       const validation = await catalogService.validateDrinkConfiguration(config);
 
       if (!validation.valid) {
@@ -250,7 +407,7 @@ export class BaristaService {
               categoryLabel: product.categoryLabel,
               description: product.description,
               image: product.image,
-              available: product.available,
+              available: isAvailable,
               basePrice: product.basePrice,
             },
             configuration: product.defaultConfiguration,
@@ -283,7 +440,7 @@ export class BaristaService {
           categoryLabel: product.categoryLabel,
           description: product.description,
           image: product.image,
-          available: product.available,
+          available: isAvailable,
           basePrice: product.basePrice,
         },
         configuration: config,
@@ -298,7 +455,23 @@ export class BaristaService {
       });
     }
 
-    // 7. Context-Aware Barista Greeting & Follow-Up
+    // 9. Format Catalog Products list for catalog queries
+    const catalogProducts: BaristaCatalogProduct[] = candidateProducts.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      category: p.category,
+      categoryLabel: p.categoryLabel,
+      description: p.description,
+      image: p.image,
+      basePrice: p.basePrice,
+      available: p.available,
+      temperatureProfile: p.temperatureProfile,
+      tasteNotes: p.tasteNotes,
+      featured: p.featured,
+    }));
+
+    // 10. Context-Aware Barista Greeting & Follow-Up
     const primary = recommendations[0];
     const finalGreeting =
       customGreeting ||
@@ -306,17 +479,25 @@ export class BaristaService {
         ? `I've crafted a personalized recommendation for you: our ${primary.product.name}!`
         : "Here are our recommended café creations tailored for your taste:");
 
-    const followUp = this.generateFollowUp(evolvedPrefs, primary?.configuration, intent);
+    const followUp = this.generateFollowUp(evolvedPrefs, primary?.configuration, intent, mode);
 
     return {
       success: true,
+      mode,
       intent,
       message: finalGreeting,
       preferences: evolvedPrefs,
+      moodContext,
+      activeProductId: resolvedActiveId,
       recommendations,
+      catalogProducts,
       comparison: comparisonData,
       productDetails,
       pairings: pairingsData,
+      cafeMoment: cafeMomentCombo,
+      budget: intentResult.extractedBudget || evolvedPrefs.budget,
+      totalPrice: cafeMomentCombo?.totalPrice || primary?.pricing.finalPrice,
+      references: intentResult.referenceResolution,
       followUpSuggestion: followUp,
     };
   }
@@ -329,8 +510,9 @@ export class BaristaService {
     products: ProductDoc[],
     prefs: BaristaPreferences,
     suggestedId?: string,
-    recentProductIds: string[] = [],
-    messageText: string = ""
+    avoidProductIds: string[] = [],
+    messageText: string = "",
+    moodContext?: BaristaMoodContext
   ): Array<{ product: ProductDoc; score: number }> {
     const rawLower = messageText.toLowerCase();
 
@@ -343,14 +525,44 @@ export class BaristaService {
           score += 60;
         }
 
-        // Avoid repetitive recommendations unless explicitly requested
-        if (recentProductIds.includes(product.id) && !rawLower.includes(product.name.toLowerCase())) {
-          score -= 35;
+        // Avoid repetitive or rejected recommendations unless explicitly requested
+        if (avoidProductIds.includes(product.id) && !rawLower.includes(product.name.toLowerCase())) {
+          score -= 40;
         }
 
         // Suggested product boost from extraction
         if (suggestedId && product.id === suggestedId) {
           score += 40;
+        }
+
+        // Mood context scoring
+        if (moodContext) {
+          switch (moodContext) {
+            case "REFRESH":
+              if (product.temperatureProfile === "Iced" || product.temperatureProfile === "Blended") score += 35;
+              if (product.category === "smoothie" || product.tasteNotes.some((n) => /mint|lemon|berry|mango/i.test(n))) score += 20;
+              break;
+            case "ENERGIZE":
+              if (product.strengthProfile >= 70) score += 35;
+              if (product.category === "cold-coffee" || product.category === "hot-coffee") score += 20;
+              break;
+            case "FOCUS":
+              if (product.strengthProfile >= 60 && product.sweetnessProfile <= 60) score += 30;
+              break;
+            case "COMFORT":
+              if (product.temperatureProfile === "Hot") score += 35;
+              if (product.tasteNotes.some((n) => /vanilla|cinnamon|caramel|cocoa/i.test(n))) score += 20;
+              break;
+            case "INDULGE":
+              if (product.sweetnessProfile >= 65 || product.category === "frappe") score += 35;
+              break;
+            case "CHILL":
+              if (product.category === "matcha" || product.category === "smoothie") score += 25;
+              break;
+            case "EXPLORE":
+              if (product.featured || product.category === "matcha" || product.id === "matcha-cloud") score += 30;
+              break;
+          }
         }
 
         // Temperature match
@@ -441,9 +653,11 @@ export class BaristaService {
     product: ProductDoc,
     prefs: BaristaPreferences,
     context: SafeCatalogContext,
-    intent?: BaristaIntent
+    intent?: BaristaIntent,
+    messageText: string = ""
   ): DrinkConfiguration {
     const baseConfig = { ...product.defaultConfiguration };
+    const text = messageText.toLowerCase();
 
     // When cheapest intent is requested, keep configuration at base minimum without paid add-ons
     if (intent === "cheapest") {
@@ -452,6 +666,13 @@ export class BaristaService {
       baseConfig.toppingIds = [];
       baseConfig.sizeId = "medium";
       return baseConfig;
+    }
+
+    // 0. Size modification (e.g. "make it large", "grande")
+    if (text.includes("large") || text.includes("grande") || text.includes("big size")) {
+      baseConfig.sizeId = "large";
+    } else if (text.includes("small") || text.includes("regular")) {
+      baseConfig.sizeId = "small";
     }
 
     // 1. Milk selection
@@ -496,13 +717,20 @@ export class BaristaService {
   }
 
   /**
-   * Generates a context-aware café follow-up inquiry based on intent and recipe.
+   * Generates a context-aware café follow-up inquiry based on intent, mode, and recipe.
    */
   private generateFollowUp(
     prefs: BaristaPreferences,
     config?: DrinkConfiguration,
-    intent?: BaristaIntent
+    intent?: BaristaIntent,
+    mode?: BaristaResponseMode
   ): string {
+    if (mode === "BUDGET_COMBO") {
+      return "Would you like me to reserve this café combo for your order, or customize the drink size?";
+    }
+    if (mode === "CATALOG_QUERY") {
+      return "Would you like to customize this drink in our Drink Studio, or see what snack pairs with it?";
+    }
     if (intent === "cheapest" || intent === "budget") {
       return "Would you like to customize any toppings or upgrade to a Grande size (+₹40)?";
     }

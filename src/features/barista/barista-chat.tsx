@@ -3,15 +3,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { recommendDrink } from "@/lib/api-client";
 import {
   BaristaConversationMessage,
-  BaristaRecommendation,
   BaristaPreferences,
   BaristaComparisonItem,
   BaristaPairingItem,
   BaristaProductSummary,
+  BaristaCatalogProduct,
+  CafeMomentCombo,
+  BaristaMoodContext,
 } from "@/types/barista";
 import { RecommendationCard } from "./recommendation-card";
 import { BaristaPrompts } from "./barista-prompts";
@@ -27,13 +28,16 @@ import {
   Utensils,
   ArrowRight,
   Compass,
+  CheckCircle2,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const INITIAL_GREETING: BaristaConversationMessage = {
   role: "assistant",
+  mode: "GREETING",
   content:
-    "Hello! I am your AI Barista. Tell me what you're craving, your mood, caffeine needs, or budget, and I'll craft an authoritative recipe or answer any question about our café menu.",
+    "Hello! I am your AI Café Concierge. Whether you're craving something bold, refreshing, within a specific budget, or curious about what pairs with your coffee, I'm here to guide you through our actual menu.",
   timestamp: Date.now(),
 };
 
@@ -50,9 +54,10 @@ export function BaristaChat() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
 
-  // Phase 6: Multi-turn Preference Accumulation & Repetition Tracking
+  // Multi-turn Preference Accumulation, Repetition Tracking & Active Context
   const [currentPreferences, setCurrentPreferences] = useState<BaristaPreferences>({});
   const [recentProductIds, setRecentProductIds] = useState<string[]>([]);
+  const [activeProductId, setActiveProductId] = useState<string | undefined>();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -91,14 +96,17 @@ export function BaristaChat() {
     setMessages(newHistory);
     setIsLoading(true);
 
-    // Dynamic sensory progress feedback
-    setLoadingStep("Interpreting intent & sensory desires...");
-    const t1 = setTimeout(() => {
-      setLoadingStep("Querying authoritative café catalog & pricing...");
-    }, 600);
-    const t2 = setTimeout(() => {
-      setLoadingStep("Validating Drink DNA & crafting response...");
-    }, 1200);
+    // Realistic concierge status messages based on query context
+    const lower = text.toLowerCase();
+    if (lower.includes("budget") || lower.includes("price") || lower.includes("expensive") || lower.includes("cheapest") || /\d+/.test(lower)) {
+      setLoadingStep("Checking what works within your budget & menu pricing...");
+    } else if (lower.includes("snack") || lower.includes("food") || lower.includes("pairing") || lower.includes("eat")) {
+      setLoadingStep("Let me find a good pairing from our kitchen...");
+    } else if (lower.includes("available") || lower.includes("menu")) {
+      setLoadingStep("Looking through today's menu...");
+    } else {
+      setLoadingStep("Let me find something that fits...");
+    }
 
     try {
       // Build conversation context for server (last 4 turns)
@@ -110,16 +118,14 @@ export function BaristaChat() {
           content: m.content,
         }));
 
-      // Phase 6: Grounded API call with cumulative preferences and recent IDs
+      // Phase 7.2 Grounded API call with active context and cumulative preferences
       const res = await recommendDrink(
         text,
         contextTurns,
         currentPreferences,
-        recentProductIds
+        recentProductIds,
+        activeProductId
       );
-
-      clearTimeout(t1);
-      clearTimeout(t2);
 
       if (res.error) {
         if (res.error.code === "RATE_LIMITED") {
@@ -144,6 +150,13 @@ export function BaristaChat() {
         setCurrentPreferences((prev) => ({ ...prev, ...res.preferences }));
       }
 
+      // Update active product reference
+      if (res.activeProductId) {
+        setActiveProductId(res.activeProductId);
+      } else if (res.recommendations && res.recommendations.length > 0) {
+        setActiveProductId(res.recommendations[0].product.id);
+      }
+
       // Update recent product IDs to avoid repetitive recommendations
       if (res.recommendations && res.recommendations.length > 0) {
         const newIds = res.recommendations.map((r) => r.product.id);
@@ -154,21 +167,25 @@ export function BaristaChat() {
         role: "assistant",
         content:
           res.message ||
-          "Here is what our café catalog and sensory engine crafted for you:",
+          "Here is what our café concierge crafted for you from our menu:",
+        mode: res.mode,
         intent: res.intent,
         recommendations: res.recommendations || [],
+        catalogProducts: res.catalogProducts,
         comparison: res.comparison,
         productDetails: res.productDetails,
         pairings: res.pairings,
+        cafeMoment: res.cafeMoment,
         preferences: res.preferences,
+        moodContext: res.moodContext,
+        budget: res.budget,
+        totalPrice: res.totalPrice,
         followUpSuggestion: res.followUpSuggestion,
         timestamp: Date.now(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err: unknown) {
-      clearTimeout(t1);
-      clearTimeout(t2);
       setErrorMsg(
         (err as Error).message ||
           "Could not reach AI Barista. Please check your internet connection."
@@ -183,6 +200,7 @@ export function BaristaChat() {
     setMessages([INITIAL_GREETING]);
     setCurrentPreferences({});
     setRecentProductIds([]);
+    setActiveProductId(undefined);
     setErrorMsg(null);
     setIsRateLimited(false);
     setInputValue("");
@@ -196,13 +214,13 @@ export function BaristaChat() {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-caramel/15 text-caramel-dark text-xs font-semibold tracking-wider uppercase mb-2 border border-caramel/20">
             <Sparkles className="w-3.5 h-3.5 text-caramel" />
-            <span>AI Barista Intelligence V2</span>
+            <span>Café Concierge Intelligence V7.2</span>
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl font-bold text-espresso tracking-tight">
             Consult Your AI Barista
           </h1>
           <p className="text-sm text-espresso/70 mt-1">
-            Intent-aware conversational café companion with authoritative pricing, budget reasoning, and Drink DNA.
+            A knowledgeable café concierge who understands cravings, our real menu, pairings, and budgets.
           </p>
         </div>
 
@@ -244,13 +262,21 @@ export function BaristaChat() {
               <div className="flex-1 space-y-4">
                 {/* Assistant Chat Bubble */}
                 <div className="max-w-2xl bg-white rounded-3xl rounded-tl-sm p-5 border border-espresso/10 shadow-soft text-espresso">
-                  {/* Intent Indicator Pill */}
-                  {msg.intent && msg.intent !== "recommend" && (
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAE2D2] text-[#3A2418] text-[10px] font-semibold tracking-wider uppercase mb-2">
-                      <Compass className="w-3 h-3 text-[#C98A4A]" />
-                      <span>Intent: {msg.intent.replace("_", " ")}</span>
-                    </div>
-                  )}
+                  {/* Mode / Intent Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    {msg.mode && msg.mode !== "RECOMMENDATION" && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#EAE2D2] text-[#3A2418] text-[10px] font-semibold tracking-wider uppercase">
+                        <Compass className="w-3 h-3 text-[#C98A4A]" />
+                        <span>Mode: {msg.mode.replace("_", " ")}</span>
+                      </span>
+                    )}
+                    {msg.moodContext && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-semibold tracking-wider uppercase">
+                        <Zap className="w-3 h-3 text-amber-700" />
+                        <span>Mood: {msg.moodContext}</span>
+                      </span>
+                    )}
+                  </div>
 
                   <p className="text-sm sm:text-base leading-relaxed mb-2">{msg.content}</p>
 
@@ -272,12 +298,17 @@ export function BaristaChat() {
                       )}
                       {typeof msg.preferences.strength === "number" && (
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-900 border border-orange-200">
-                          ⚡ Caffeine: {msg.preferences.strength}%
+                          ⚡ Boldness: {msg.preferences.strength}%
                         </span>
                       )}
                       {msg.preferences.flavor && (
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-caramel/10 text-caramel-dark border border-caramel/20 capitalize">
                           🍯 {msg.preferences.flavor}
+                        </span>
+                      )}
+                      {msg.preferences.milk && (
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-800 border border-stone-200 capitalize">
+                          🥛 {msg.preferences.milk.replace("-", " ")}
                         </span>
                       )}
                       {typeof msg.preferences.budget === "number" && (
@@ -289,61 +320,72 @@ export function BaristaChat() {
                   )}
                 </div>
 
-                {/* PHASE 6: COMPARISON BLOCK */}
+                {/* 1. CATALOG_QUERY: Show authentic catalog product cards without forcing custom creation cards */}
+                {msg.mode === "CATALOG_QUERY" && msg.catalogProducts && msg.catalogProducts.length > 0 && (
+                  <CatalogQueryBlock products={msg.catalogProducts} />
+                )}
+
+                {/* 2. BUDGET_COMBO: Complete My Café Moment (Drink + Snack <= Budget) */}
+                {msg.mode === "BUDGET_COMBO" && msg.cafeMoment && (
+                  <CafeMomentBlock combo={msg.cafeMoment} />
+                )}
+
+                {/* 3. COMPARISON BLOCK */}
                 {msg.comparison && (
                   <ComparisonBlock comparison={msg.comparison} />
                 )}
 
-                {/* PHASE 6: ARTISAN FOOD PAIRINGS BLOCK */}
-                {msg.pairings && msg.pairings.length > 0 && (
+                {/* 4. FOOD PAIRINGS BLOCK */}
+                {msg.pairings && msg.pairings.length > 0 && msg.mode !== "BUDGET_COMBO" && (
                   <PairingsBlock pairings={msg.pairings} />
                 )}
 
-                {/* PHASE 6: PRODUCT DETAILS BLOCK */}
+                {/* 5. PRODUCT DETAILS BLOCK */}
                 {msg.productDetails && (
                   <ProductDetailsBlock product={msg.productDetails} />
                 )}
 
-                {/* Standard Grounded Drink Recommendations Grid */}
-                {msg.recommendations && msg.recommendations.length > 0 && !msg.comparison && !msg.productDetails && (
-                  <div className="space-y-4 pt-2">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-espresso/80">
-                      <Coffee className="w-4 h-4 text-caramel" />
-                      <span>
-                        {msg.intent === "cheapest"
-                          ? "Lowest-Priced Option"
-                          : msg.intent === "budget"
-                          ? "Budget Matches"
-                          : msg.intent === "random"
-                          ? "Curated Surprise"
-                          : `Recommended Custom Creations (${msg.recommendations.length})`}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {msg.recommendations.map((rec, rIdx) => (
-                        <RecommendationCard
-                          key={`${rec.product.id}-${rIdx}`}
-                          recommendation={rec}
-                          rankIndex={rIdx}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Follow-up Inquiry Chip */}
-                    {msg.followUpSuggestion && (
-                      <div className="bg-cream/60 rounded-2xl p-4 border border-espresso/10 flex items-start gap-3">
-                        <Info className="w-4 h-4 text-caramel shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs font-semibold text-espresso">
-                            Barista Follow-up:
-                          </p>
-                          <p className="text-xs sm:text-sm text-espresso/80 mt-0.5">
-                            {msg.followUpSuggestion}
-                          </p>
-                        </div>
+                {/* 6. Standard Grounded Drink Recommendations Grid (for RECOMMENDATION & CUSTOMIZATION modes) */}
+                {msg.recommendations &&
+                  msg.recommendations.length > 0 &&
+                  msg.mode !== "CATALOG_QUERY" &&
+                  msg.mode !== "BUDGET_COMBO" &&
+                  !msg.comparison &&
+                  !msg.productDetails && (
+                    <div className="space-y-4 pt-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-espresso/80">
+                        <Coffee className="w-4 h-4 text-caramel" />
+                        <span>
+                          {msg.mode === "CUSTOMIZATION"
+                            ? "Customized Recipe for You"
+                            : `Recommended Creations (${msg.recommendations.length})`}
+                        </span>
                       </div>
-                    )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {msg.recommendations.map((rec, rIdx) => (
+                          <RecommendationCard
+                            key={`${rec.product.id}-${rIdx}`}
+                            recommendation={rec}
+                            rankIndex={rIdx}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Follow-up Inquiry Chip */}
+                {msg.followUpSuggestion && (
+                  <div className="bg-cream/60 rounded-2xl p-4 border border-espresso/10 flex items-start gap-3">
+                    <Info className="w-4 h-4 text-caramel shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-espresso">
+                        Barista Inquiry:
+                      </p>
+                      <p className="text-xs sm:text-sm text-espresso/80 mt-0.5">
+                        {msg.followUpSuggestion}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -351,7 +393,7 @@ export function BaristaChat() {
           );
         })}
 
-        {/* Loading Spinner with Dynamic Step */}
+        {/* Loading Spinner with Dynamic Concierge Step */}
         {isLoading && (
           <div className="flex items-start gap-3 sm:gap-4">
             <div className="w-9 h-9 rounded-full bg-espresso text-cream flex items-center justify-center shrink-0 mt-1 shadow-soft">
@@ -362,7 +404,7 @@ export function BaristaChat() {
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-caramel animate-ping" />
                 <span className="text-sm font-medium text-espresso/80">
-                  {loadingStep || "Crafting your personalized drink..."}
+                  {loadingStep || "Consulting the menu..."}
                 </span>
               </div>
             </div>
@@ -407,7 +449,7 @@ export function BaristaChat() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Ask anything (e.g. 'cheapest coffee', 'under ₹200', 'compare latte and cold brew', 'snack with cold brew')..."
+              placeholder="Ask anything (e.g. 'which coffee costs the most?', 'coffee & snack under ₹300', 'make it strong')..."
               disabled={isLoading}
               maxLength={500}
               className="w-full pl-5 pr-14 py-3.5 sm:py-4 rounded-full bg-white border border-espresso/15 text-sm text-espresso placeholder:text-warmgray focus:outline-none focus:border-caramel focus:ring-2 focus:ring-caramel/20 shadow-soft disabled:opacity-60 transition-all"
@@ -441,7 +483,158 @@ export function BaristaChat() {
 }
 
 /**
- * Phase 6: Side-by-side Product Comparison Block
+ * Phase 7.2: Actual Catalog Product Query Cards
+ */
+function CatalogQueryBlock({ products }: { products: BaristaCatalogProduct[] }) {
+  return (
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-espresso/80">
+        <Coffee className="w-4 h-4 text-caramel" />
+        <span>Authentic Café Menu Items ({products.length})</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {products.map((p) => (
+          <div
+            key={p.id}
+            className="p-4 rounded-2xl bg-white border border-espresso/10 shadow-soft flex flex-col justify-between"
+          >
+            <div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-caramel px-2 py-0.5 rounded-full bg-caramel/10">
+                  {p.categoryLabel}
+                </span>
+                <span className="text-sm font-bold text-espresso">
+                  ₹{p.basePrice}
+                </span>
+              </div>
+              <h4 className="font-serif text-base font-bold text-espresso mt-1.5">
+                {p.name}
+              </h4>
+              <p className="text-xs text-espresso/70 mt-1 line-clamp-2">
+                {p.description}
+              </p>
+              <div className="flex flex-wrap gap-1 mt-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-cream text-espresso/70 border border-espresso/5">
+                  {p.temperatureProfile}
+                </span>
+                {p.tasteNotes.slice(0, 2).map((n, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-cream text-espresso/70 border border-espresso/5"
+                  >
+                    🌿 {n}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-espresso/5 flex items-center justify-between">
+              <span className={`text-[11px] font-medium ${p.available ? "text-emerald-700 flex items-center gap-1" : "text-amber-700"}`}>
+                {p.available ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>In Stock</span>
+                  </>
+                ) : (
+                  <span>Limited Batch</span>
+                )}
+              </span>
+              <Link
+                href={`/builder?preset=${p.id}`}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-caramel hover:text-caramel-dark transition-colors"
+              >
+                <span>Customize</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 7.2: Complete My Café Moment (Budget Combo) Block
+ */
+function CafeMomentBlock({ combo }: { combo: CafeMomentCombo }) {
+  return (
+    <div className="bg-gradient-to-br from-cream/90 to-white rounded-3xl p-6 border border-espresso/15 shadow-soft space-y-4">
+      <div className="flex items-center justify-between pb-3 border-b border-espresso/10">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-caramel-dark">
+          <Utensils className="w-4 h-4 text-caramel" />
+          <span>Complete Your Café Moment</span>
+        </div>
+        <div className="text-right">
+          <span className="text-[11px] text-espresso/60 block">Combo Total</span>
+          <span className="text-base font-bold text-espresso">₹{combo.totalPrice}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Drink */}
+        <div className="p-4 rounded-2xl bg-white/90 border border-espresso/10 shadow-xs flex flex-col justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-caramel px-2 py-0.5 rounded-full bg-caramel/10">
+              {combo.drink.categoryLabel}
+            </span>
+            <h5 className="font-serif font-bold text-base text-espresso mt-1.5">
+              {combo.drink.name}
+            </h5>
+            <div className="text-xs font-semibold text-espresso/80 mt-1">
+              ₹{combo.drink.price}
+            </div>
+          </div>
+          <Link
+            href={`/builder?preset=${combo.drink.id}`}
+            className="mt-3 inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-xl bg-espresso text-cream text-xs font-medium hover:bg-espresso/90 transition-colors"
+          >
+            <span>Customize Drink</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {/* Snack */}
+        <div className="p-4 rounded-2xl bg-white/90 border border-espresso/10 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-warmgray px-2 py-0.5 rounded-full bg-espresso/5">
+                {combo.snack.category}
+              </span>
+              <span className="text-xs font-bold text-espresso">
+                ₹{combo.snack.price}
+              </span>
+            </div>
+            <h5 className="font-serif font-bold text-base text-espresso mt-1.5">
+              {combo.snack.name}
+            </h5>
+            <p className="text-xs text-espresso/70 mt-1 leading-relaxed">
+              {combo.snack.description}
+            </p>
+          </div>
+          <div className="mt-3 text-[10px] text-espresso/80 italic pt-2 border-t border-espresso/5">
+            ✨ {combo.snack.whyItWorks}
+          </div>
+        </div>
+      </div>
+
+      {combo.dessert && (
+        <div className="p-3.5 rounded-2xl bg-white/60 border border-espresso/5 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-semibold text-caramel uppercase tracking-wider">
+              Optional Sweet Addition: {combo.dessert.name}
+            </span>
+            <p className="text-xs text-espresso/70 mt-0.5">{combo.dessert.whyItWorks}</p>
+          </div>
+          <span className="text-xs font-bold text-espresso">+₹{combo.dessert.price}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 6/7: Side-by-side Product Comparison Block
  */
 function ComparisonBlock({ comparison }: { comparison: BaristaComparisonItem }) {
   const { productA, productB, highlights, priceDifference } = comparison;
@@ -534,7 +727,7 @@ function ComparisonBlock({ comparison }: { comparison: BaristaComparisonItem }) 
 }
 
 /**
- * Phase 6: Food & Snack Pairings Block
+ * Phase 6/7: Food & Snack Pairings Block
  */
 function PairingsBlock({ pairings }: { pairings: BaristaPairingItem[] }) {
   return (
@@ -580,7 +773,7 @@ function PairingsBlock({ pairings }: { pairings: BaristaPairingItem[] }) {
 }
 
 /**
- * Phase 6: Product Details Block
+ * Phase 6/7: Product Details Block
  */
 function ProductDetailsBlock({ product }: { product: BaristaProductSummary & { tasteNotes?: string[]; calories?: number } }) {
   return (

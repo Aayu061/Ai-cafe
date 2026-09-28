@@ -296,3 +296,70 @@ export function requirePermission(...requiredPermissions: string[]) {
     next();
   };
 }
+
+/**
+ * Optional authentication middleware:
+ * Attaches user to req.user if a valid token is provided,
+ * but allows unauthenticated guest requests to proceed safely.
+ */
+export async function optionalAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return next();
+  }
+
+  const parts = authHeader.split(" ");
+  if (parts.length !== 2 || parts[0]?.toLowerCase() !== "bearer" || !parts[1]) {
+    return next();
+  }
+
+  const token = parts[1];
+
+  // Test token simulation
+  if (process.env.NODE_ENV === "test" && token.startsWith("test-token-")) {
+    const testRole = (req.headers["x-test-role"] as UserRole) || (token.replace("test-token-", "") as UserRole);
+    const testStatus = (req.headers["x-test-status"] as UserStatus) || "active";
+    const testUid = (req.headers["x-test-uid"] as string) || `test-${testRole}-uid`;
+    const testDomain: AccountDomain = (req.headers["x-test-domain"] as AccountDomain) || testRole;
+
+    req.user = {
+      uid: testUid,
+      email: `${testRole}@aicafe.test`,
+      accountDomain: testDomain,
+      role: testRole,
+      status: testStatus,
+      permissions: ROLE_PERMISSIONS[testRole] || [],
+    };
+    return next();
+  }
+
+  try {
+    const adminAuth = getFirebaseAdminAuth();
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    const resolved = await accountResolutionService.resolveAccount(decodedToken.uid);
+
+    req.user = {
+      uid: decodedToken.uid,
+      email: decodedToken.email || resolved.email,
+      email_verified: decodedToken.email_verified,
+      name: decodedToken.name || resolved.displayName,
+      picture: (decodedToken.picture || resolved.photoURL) ?? undefined,
+      accountDomain: resolved.accountDomain,
+      role: resolved.role,
+      status: resolved.status,
+      permissions: resolved.permissions || ROLE_PERMISSIONS[resolved.role] || [],
+      employeeId: resolved.employeeId,
+      claims: decodedToken,
+    };
+  } catch {
+    // Guest fallback on token failure
+    req.user = undefined;
+  }
+
+  next();
+}
+

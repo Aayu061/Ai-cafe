@@ -44,6 +44,7 @@ export const recommendationRequestSchema = z.object({
     .default([]),
   preferences: baristaPreferencesInputSchema,
   recentProductIds: z.array(z.string().max(100)).max(10).optional().default([]),
+  activeProductId: z.string().max(100).optional(),
 });
 
 export type BaristaConversationMessage = z.infer<typeof baristaConversationMessageSchema>;

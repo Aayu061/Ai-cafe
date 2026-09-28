@@ -23,7 +23,9 @@ export class MockAiProvider implements AiProvider {
     const preferences: BaristaPreferences = {};
 
     // Temperature detection
-    if (text.includes("hot") || text.includes("warm") || text.includes("steamed")) {
+    if (text.includes("hot today") || text.includes("so hot") || text.includes("hot outside")) {
+      preferences.temperature = "cold";
+    } else if (text.includes("hot") || text.includes("warm") || text.includes("steamed")) {
       preferences.temperature = "hot";
     } else if (text.includes("frappe") || text.includes("blended") || text.includes("smoothie")) {
       preferences.temperature = "blended";
@@ -47,8 +49,10 @@ export class MockAiProvider implements AiProvider {
       preferences.strength = 5;
     } else if (text.includes("extra strong") || text.includes("very strong") || text.includes("double shot") || text.includes("high caffeine")) {
       preferences.strength = 90;
+    } else if (text.includes("make it strong") || text.includes("stronger")) {
+      preferences.strength = 85;
     } else if (text.includes("strong") || text.includes("bold") || text.includes("wake me up") || text.includes("energizing")) {
-      preferences.strength = 75;
+      preferences.strength = 80;
     }
 
     // Creaminess detection

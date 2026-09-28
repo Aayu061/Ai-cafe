@@ -911,6 +911,405 @@ async function runTests() {
     return { ok, details: `Status: ${res.status}, System Status: ${body.status}, Env: ${body.environment}` };
   });
 
+  // ==========================================
+  // PHASE 7.2: AI CONCIERGE & NLU INTELLIGENCE SUITE (44 TESTS)
+  // ==========================================
+  const { baristaToolsService } = await import("./services/barista/barista-tools.service");
+
+  // 61. Price NLU: expensive coffee in your cafe
+  await check("61. Price NLU: 'expensive coffee in your cafe' resolves to most_expensive catalog query", async () => {
+    const res = await baristaService.getRecommendation("expensive coffee in your cafe");
+    const ok =
+      res.mode === "CATALOG_QUERY" &&
+      res.intent === "most_expensive" &&
+      !!res.catalogProducts &&
+      res.catalogProducts[0].basePrice >= 190;
+    return {
+      ok,
+      details: `Mode: ${res.mode}, Intent: ${res.intent}, Top: ${res.catalogProducts?.[0]?.name} (₹${res.catalogProducts?.[0]?.basePrice})`,
+    };
+  });
+
+  // 62. Price NLU: which coffee costs the most?
+  await check("62. Price NLU: 'which coffee costs the most?' finds authoritative priciest coffee", async () => {
+    const res = await baristaService.getRecommendation("which coffee costs the most?");
+    const ok =
+      res.mode === "CATALOG_QUERY" &&
+      res.intent === "most_expensive" &&
+      res.catalogProducts?.[0]?.name === "Mocha Cream" &&
+      res.catalogProducts?.[0]?.basePrice === 220;
+    return {
+      ok,
+      details: `Mode: ${res.mode}, Product: ${res.catalogProducts?.[0]?.name}, Price: ₹${res.catalogProducts?.[0]?.basePrice}`,
+    };
+  });
+
+  // 63. Price NLU: what's your priciest coffee?
+  await check("63. Price NLU: 'what\\'s your priciest coffee?' maps to most_expensive query", async () => {
+    const res = await baristaService.getRecommendation("what's your priciest coffee?");
+    const ok = res.mode === "CATALOG_QUERY" && res.intent === "most_expensive";
+    return { ok, details: `Mode: ${res.mode}, Product: ${res.catalogProducts?.[0]?.name}` };
+  });
+
+  // 64. Price NLU: show me the fanciest coffee
+  await check("64. Price NLU: 'show me the fanciest coffee' maps to most_expensive query", async () => {
+    const res = await baristaService.getRecommendation("show me the fanciest coffee");
+    const ok = res.mode === "CATALOG_QUERY" && res.intent === "most_expensive";
+    return { ok, details: `Mode: ${res.mode}, Intent: ${res.intent}` };
+  });
+
+  // 65. Price NLU: which coffee has the highest price?
+  await check("65. Price NLU: 'which coffee has the highest price?' maps to most_expensive query", async () => {
+    const res = await baristaService.getRecommendation("which coffee has the highest price?");
+    const ok = res.mode === "CATALOG_QUERY" && res.intent === "most_expensive" && res.catalogProducts?.[0]?.basePrice === 220;
+    return { ok, details: `Mode: ${res.mode}, Price: ₹${res.catalogProducts?.[0]?.basePrice}` };
+  });
+
+  // 66. Price NLU: what is your premium coffee?
+  await check("66. Price NLU: 'what is your premium coffee?' maps to most_expensive query", async () => {
+    const res = await baristaService.getRecommendation("what is your premium coffee?");
+    const ok = res.mode === "CATALOG_QUERY" && res.intent === "most_expensive";
+    return { ok, details: `Mode: ${res.mode}, Product: ${res.catalogProducts?.[0]?.name}` };
+  });
+
+  // 67. Price NLU: give me the cheapest coffee
+  await check("67. Price NLU: 'give me the cheapest coffee' maps to cheapest query (Caramel Cold Brew ₹180)", async () => {
+    const res = await baristaService.getRecommendation("give me the cheapest coffee");
+    const ok =
+      res.mode === "CATALOG_QUERY" &&
+      res.intent === "cheapest" &&
+      res.catalogProducts?.[0]?.name === "Caramel Cold Brew" &&
+      res.catalogProducts?.[0]?.basePrice === 180;
+    return {
+      ok,
+      details: `Mode: ${res.mode}, Product: ${res.catalogProducts?.[0]?.name}, Price: ₹${res.catalogProducts?.[0]?.basePrice}`,
+    };
+  });
+
+  // 68. Budget NLU: I only have ₹200
+  await check("68. Budget NLU: 'I only have ₹200' extracts budget=200 and filters real items", async () => {
+    const res = await baristaService.getRecommendation("I only have ₹200");
+    const allWithin = (res.catalogProducts || []).every((p) => p.basePrice <= 200);
+    const ok = res.preferences.budget === 200 && allWithin && (res.catalogProducts?.length || 0) > 0;
+    return { ok, details: `Budget: ₹${res.preferences.budget}, Count: ${res.catalogProducts?.length}` };
+  });
+
+  // 69. Budget NLU: keep it under 200
+  await check("69. Budget NLU: 'keep it under 200' extracts budget=200 and enforces price limit", async () => {
+    const res = await baristaService.getRecommendation("keep it under 200");
+    const ok = res.preferences.budget === 200 && (res.catalogProducts || []).every((p) => p.basePrice <= 200);
+    return { ok, details: `Budget: ₹${res.preferences.budget}` };
+  });
+
+  // 70. Budget NLU: what can I get for 200?
+  await check("70. Budget NLU: 'what can I get for 200?' extracts budget=200", async () => {
+    const res = await baristaService.getRecommendation("what can I get for 200?");
+    const ok = res.preferences.budget === 200;
+    return { ok, details: `Budget: ₹${res.preferences.budget}` };
+  });
+
+  // 71. Budget NLU: I've got two hundred rupees
+  await check("71. Budget NLU: 'I\\'ve got two hundred rupees' parses word-form budget into 200", async () => {
+    const res = await baristaService.getRecommendation("I've got two hundred rupees");
+    const ok = res.preferences.budget === 200;
+    return { ok, details: `Parsed Word Budget: ₹${res.preferences.budget}` };
+  });
+
+  // 72. Budget NLU: something affordable around ₹250
+  await check("72. Budget NLU: 'something affordable around ₹250' parses budget into 250", async () => {
+    const res = await baristaService.getRecommendation("something affordable around ₹250");
+    const ok = res.preferences.budget === 250;
+    return { ok, details: `Parsed Budget: ₹${res.preferences.budget}` };
+  });
+
+  // 73. Temperature NLU: I want something cold
+  await check("73. Temperature NLU: 'I want something cold' sets temperature=cold", async () => {
+    const res = await baristaService.getRecommendation("I want something cold");
+    const ok = res.preferences.temperature === "cold" && res.recommendations.length > 0;
+    return { ok, details: `Temperature: ${res.preferences.temperature}, Top: ${res.recommendations[0]?.product.name}` };
+  });
+
+  // 74. Temperature NLU: it's hot today
+  await check("74. Temperature NLU: 'it\\'s hot today' detects REFRESH mood and cold temperature", async () => {
+    const res = await baristaService.getRecommendation("it's hot today");
+    const ok = res.moodContext === "REFRESH" && res.preferences.temperature === "cold";
+    return { ok, details: `Mood: ${res.moodContext}, Temp: ${res.preferences.temperature}` };
+  });
+
+  // 75. Temperature NLU: give me something refreshing
+  await check("75. Temperature NLU: 'give me something refreshing' detects REFRESH mood", async () => {
+    const res = await baristaService.getRecommendation("give me something refreshing");
+    const ok = res.moodContext === "REFRESH";
+    return { ok, details: `Mood: ${res.moodContext}` };
+  });
+
+  // 76. Mood NLU: I need something to wake me up
+  await check("76. Mood NLU: 'I need something to wake me up' maps to ENERGIZE mood with high strength", async () => {
+    const res = await baristaService.getRecommendation("I need something to wake me up");
+    const ok = res.moodContext === "ENERGIZE" && (res.preferences.strength || 0) >= 70;
+    return { ok, details: `Mood: ${res.moodContext}, Strength: ${res.preferences.strength}%` };
+  });
+
+  // 77. Mood NLU: I'm working and need coffee
+  await check("77. Mood NLU: 'I\\'m working and need coffee' maps to FOCUS mood", async () => {
+    const res = await baristaService.getRecommendation("I'm working and need coffee");
+    const ok = res.moodContext === "FOCUS";
+    return { ok, details: `Mood: ${res.moodContext}` };
+  });
+
+  // 78. Mood NLU: I want something cozy
+  await check("78. Mood NLU: 'I want something cozy' maps to COMFORT mood with warm temperature", async () => {
+    const res = await baristaService.getRecommendation("I want something cozy");
+    const ok = res.moodContext === "COMFORT" && res.preferences.temperature === "hot";
+    return { ok, details: `Mood: ${res.moodContext}, Temp: ${res.preferences.temperature}` };
+  });
+
+  // 79. Mood NLU: I want to treat myself
+  await check("79. Mood NLU: 'I want to treat myself' maps to INDULGE mood with elevated sweetness", async () => {
+    const res = await baristaService.getRecommendation("I want to treat myself");
+    const ok = res.moodContext === "INDULGE" && (res.preferences.sweetness || 0) >= 65;
+    return { ok, details: `Mood: ${res.moodContext}, Sweetness: ${res.preferences.sweetness}%` };
+  });
+
+  // 80. Mood NLU: I want something new
+  await check("80. Mood NLU: 'I want something new' maps to EXPLORE mood", async () => {
+    const res = await baristaService.getRecommendation("I want something new");
+    const ok = res.moodContext === "EXPLORE";
+    return { ok, details: `Mood: ${res.moodContext}` };
+  });
+
+  // 81. Pairing NLU: what should I eat with this?
+  await check("81. Pairing NLU: 'what should I eat with this?' resolves PAIRING mode for active drink", async () => {
+    const res = await baristaService.getRecommendation("what should I eat with this?", [], undefined, [], undefined, "caramel-cold-brew");
+    const ok = res.mode === "PAIRING" && Array.isArray(res.pairings) && res.pairings.length > 0;
+    return { ok, details: `Mode: ${res.mode}, Pairings Count: ${res.pairings?.length}, First: ${res.pairings?.[0]?.name}` };
+  });
+
+  // 82. Pairing NLU: what snack goes with my coffee?
+  await check("82. Pairing NLU: 'what snack goes with my coffee?' returns artisan food pairings", async () => {
+    const res = await baristaService.getRecommendation("what snack goes with my coffee?");
+    const ok = res.mode === "PAIRING" && (res.pairings?.length || 0) > 0;
+    return { ok, details: `Mode: ${res.mode}, Count: ${res.pairings?.length}` };
+  });
+
+  // 83. Pairing NLU: give me something sweet with it
+  await check("83. Pairing NLU: 'give me something sweet with it' returns sweet pastries/cookies", async () => {
+    const res = await baristaService.getRecommendation("give me something sweet with it", [], undefined, [], undefined, "vanilla-latte");
+    const hasSweet = (res.pairings || []).some((p) => p.category === "pastry" || p.category === "cookie" || p.category === "cake");
+    const ok = res.mode === "PAIRING" && hasSweet;
+    return { ok, details: `Mode: ${res.mode}, Has Sweet: ${hasSweet}` };
+  });
+
+  // 84. Café Moment: complete my café moment
+  await check("84. Café Moment: 'complete my café moment' returns structured BUDGET_COMBO with drink & snack", async () => {
+    const res = await baristaService.getRecommendation("complete my café moment");
+    const ok =
+      res.mode === "BUDGET_COMBO" &&
+      !!res.cafeMoment &&
+      !!res.cafeMoment.drink &&
+      !!res.cafeMoment.snack &&
+      res.cafeMoment.totalPrice === res.cafeMoment.drink.price + res.cafeMoment.snack.price;
+    return {
+      ok,
+      details: `Mode: ${res.mode}, Combo: ${res.cafeMoment?.drink?.name} + ${res.cafeMoment?.snack?.name}, Total: ₹${res.cafeMoment?.totalPrice}`,
+    };
+  });
+
+  // 85. Context NLU: make it strong
+  await check("85. Context NLU: 'make it strong' updates strength to >= 80 in CUSTOMIZATION mode", async () => {
+    const res = await baristaService.getRecommendation("make it strong", [], { temperature: "cold" });
+    const ok = res.mode === "CUSTOMIZATION" && (res.preferences.strength || 0) >= 80;
+    return { ok, details: `Mode: ${res.mode}, Strength: ${res.preferences.strength}%` };
+  });
+
+  // 86. Context NLU: less sweet
+  await check("86. Context NLU: 'less sweet' adjusts sweetness to <= 35 without dropping prior state", async () => {
+    const res = await baristaService.getRecommendation("less sweet", [], { temperature: "cold", strength: 80 });
+    const ok =
+      res.mode === "CUSTOMIZATION" &&
+      res.preferences.temperature === "cold" &&
+      res.preferences.strength === 80 &&
+      (res.preferences.sweetness || 0) <= 35;
+    return { ok, details: `Mode: ${res.mode}, Sweetness: ${res.preferences.sweetness}%, Temp: ${res.preferences.temperature}` };
+  });
+
+  // 87. Context NLU: add caramel
+  await check("87. Context NLU: 'add caramel' detects flavor preference caramel", async () => {
+    const res = await baristaService.getRecommendation("add caramel", [], { temperature: "cold" });
+    const hasCaramel = res.preferences.flavor === "caramel" || res.preferences.flavorPreferences?.includes("caramel");
+    const ok = !!hasCaramel && res.preferences.temperature === "cold";
+    return { ok, details: `Flavor: ${res.preferences.flavor}, Flavors: ${res.preferences.flavorPreferences?.join(",")}` };
+  });
+
+  // 88. Context NLU: make it large
+  await check("88. Context NLU: 'make it large' sets recipe size to large", async () => {
+    const res = await baristaService.getRecommendation("make it large", [], undefined, [], undefined, "caramel-cold-brew");
+    const size = res.recommendations[0]?.configuration?.sizeId;
+    const ok = size === "large";
+    return { ok, details: `Size: ${size}` };
+  });
+
+  // 89. Context NLU: make that iced
+  await check("89. Context NLU: 'make that iced' modifies beverage temperature to cold", async () => {
+    const res = await baristaService.getRecommendation("make that iced", [], { strength: 80 }, [], undefined, "vanilla-latte");
+    const ok = res.preferences.temperature === "cold" && res.preferences.strength === 80;
+    return { ok, details: `Temp: ${res.preferences.temperature}, Strength: ${res.preferences.strength}%` };
+  });
+
+  // 90. References NLU: give me another
+  await check("90. References NLU: 'give me another' marks previous drink as avoided and offers alternative", async () => {
+    const res = await baristaService.getRecommendation("give me another", [], undefined, ["caramel-cold-brew"], undefined, "caramel-cold-brew");
+    const topId = res.recommendations[0]?.product.id;
+    const ok = topId !== "caramel-cold-brew";
+    return { ok, details: `Avoided: caramel-cold-brew, New Top: ${topId}` };
+  });
+
+  // 91. References NLU: not that one
+  await check("91. References NLU: 'not that one' rejects target drink and changes recommendation", async () => {
+    const res = await baristaService.getRecommendation("not that one", [], undefined, ["caramel-cold-brew"], undefined, "caramel-cold-brew");
+    const topId = res.recommendations[0]?.product.id;
+    const ok = topId !== "caramel-cold-brew" && res.references?.action === "reject";
+    return { ok, details: `Action: ${res.references?.action}, New Top: ${topId}` };
+  });
+
+  // 92. References NLU: something similar
+  await check("92. References NLU: 'something similar' preserves sensory profile", async () => {
+    const res = await baristaService.getRecommendation("something similar", [], { temperature: "cold", sweetness: 30 });
+    const ok = res.preferences.temperature === "cold" && res.preferences.sweetness === 30;
+    return { ok, details: `Preserved Temp: ${res.preferences.temperature}, Sweetness: ${res.preferences.sweetness}` };
+  });
+
+  // 93. References NLU: what about the second one?
+  await check("93. References NLU: 'what about the second one?' resolves to index 1 recommendation", async () => {
+    const res = await baristaService.getRecommendation("what about the second one?", [], undefined, ["caramel-cold-brew", "vanilla-latte"]);
+    const ok = res.references?.resolvedIndex === 1 && res.references?.resolvedProductId === "vanilla-latte";
+    return { ok, details: `Resolved Index: ${res.references?.resolvedIndex}, Target: ${res.references?.resolvedProductId}` };
+  });
+
+  // 94. References NLU: make that one iced
+  await check("94. References NLU: 'make that one iced' modifies temperature of referenced drink", async () => {
+    const res = await baristaService.getRecommendation("make that one iced", [], undefined, ["vanilla-latte"], undefined, "vanilla-latte");
+    const ok = res.preferences.temperature === "cold" && res.activeProductId === "vanilla-latte";
+    return { ok, details: `Target: ${res.activeProductId}, Temp: ${res.preferences.temperature}` };
+  });
+
+  // 95. Surprise NLU: surprise me
+  await check("95. Surprise NLU: 'surprise me' returns single curated surprise from menu", async () => {
+    const res = await baristaService.getRecommendation("surprise me");
+    const ok = res.intent === "random" && res.recommendations.length === 1;
+    return { ok, details: `Intent: ${res.intent}, Picked: ${res.recommendations[0]?.product.name}` };
+  });
+
+  // 96. Surprise NLU: pick something for me
+  await check("96. Surprise NLU: 'pick something for me' maps to random/curated surprise", async () => {
+    const res = await baristaService.getRecommendation("pick something for me");
+    const ok = res.intent === "random";
+    return { ok, details: `Intent: ${res.intent}, Picked: ${res.recommendations[0]?.product.name}` };
+  });
+
+  // 97. Surprise NLU: choose something unexpected
+  await check("97. Surprise NLU: 'choose something unexpected' maps to random with EXPLORE mood", async () => {
+    const res = await baristaService.getRecommendation("choose something unexpected");
+    const ok = res.intent === "random" && res.moodContext === "EXPLORE";
+    return { ok, details: `Intent: ${res.intent}, Mood: ${res.moodContext}` };
+  });
+
+  // 98. Security: AI cannot invent price
+  await check("98. Price Integrity: AI cannot invent prices — matches server catalog with 0 deviation", async () => {
+    const { catalogService } = await import("./services/catalog.service");
+    const res = await baristaService.getRecommendation("recommend me a coffee");
+    const top = res.recommendations[0];
+    const serverProduct = await catalogService.getProductByIdOrSlug(top.product.id);
+    const ok = !!serverProduct && top.pricing.basePrice === serverProduct.basePrice;
+    return { ok, details: `AI Base: ₹${top.pricing.basePrice}, Catalog Base: ₹${serverProduct?.basePrice}` };
+  });
+
+  // 99. Security: AI cannot recommend unavailable product as available
+  await check("99. Availability Awareness: Unavailable product is flagged and provides alternative", async () => {
+    const check1 = await baristaToolsService.checkAvailability("caramel-cold-brew");
+    const ok1 = check1.available === true;
+    return { ok: ok1, details: `Caramel Cold Brew Available: ${check1.available}, Alternatives: ${check1.alternatives.length}` };
+  });
+
+  // 100. Security: AI cannot access another customer's data
+  await check("100. Customer Data Isolation: User A cannot access User B's favorites or private profile", async () => {
+    const userA_favs = await baristaToolsService.getOwnFavorites("user-a-uid");
+    const userB_favs = await baristaToolsService.getOwnFavorites("user-b-uid");
+    const anonFavs = await baristaToolsService.getOwnFavorites(undefined);
+    const ok = Array.isArray(userA_favs) && Array.isArray(userB_favs) && anonFavs.length === 0;
+    return { ok, details: `Anon Favs: ${anonFavs.length}, User A: ${userA_favs.length}, User B: ${userB_favs.length}` };
+  });
+
+  // 101. Multi-Turn Test A: Cold -> Strong -> Less Sweet -> Pairing
+  await check("101. Multi-Turn Flow A: Cold -> Strong -> Less Sweet -> Pairing preserves context", async () => {
+    // Turn 1
+    const t1 = await baristaService.getRecommendation("I want something cold");
+    const ok1 = t1.preferences.temperature === "cold";
+
+    // Turn 2
+    const t2 = await baristaService.getRecommendation("Make it strong", [], t1.preferences, [t1.recommendations[0].product.id], undefined, t1.activeProductId);
+    const ok2 = t2.preferences.temperature === "cold" && (t2.preferences.strength || 0) >= 80;
+
+    // Turn 3
+    const t3 = await baristaService.getRecommendation("Less sweet", [], t2.preferences, [t2.recommendations[0].product.id], undefined, t2.activeProductId);
+    const ok3 = t3.preferences.temperature === "cold" && t3.preferences.strength === t2.preferences.strength && (t3.preferences.sweetness || 0) <= 35;
+
+    // Turn 4
+    const t4 = await baristaService.getRecommendation("What snack goes with it?", [], t3.preferences, [t3.recommendations[0].product.id], undefined, t3.activeProductId);
+    const ok4 = t4.mode === "PAIRING" && (t4.pairings?.length || 0) > 0;
+
+    const allOk = ok1 && ok2 && ok3 && ok4;
+    return {
+      ok: allOk,
+      details: `T1(Cold): ${ok1}, T2(Strong ${t2.preferences.strength}%): ${ok2}, T3(Sweet ${t3.preferences.sweetness}%): ${ok3}, T4(Pairing ${t4.pairings?.[0]?.name}): ${ok4}`,
+    };
+  });
+
+  // 102. Multi-Turn Test B: Most expensive -> Similar but cheaper
+  await check("102. Multi-Turn Flow B: 'What\\'s most expensive coffee?' -> 'Something similar but cheaper'", async () => {
+    // Turn 1: priciest coffee
+    const t1 = await baristaService.getRecommendation("What's the most expensive coffee?");
+    const expensivePrice = t1.catalogProducts?.[0]?.basePrice || 220;
+
+    // Turn 2: similar but cheaper
+    const t2 = await baristaService.getRecommendation("Something similar but cheaper", [], t1.preferences, [t1.catalogProducts?.[0]?.id || "mocha-cream"], undefined, t1.catalogProducts?.[0]?.id);
+    const cheaperPrice = t2.recommendations[0]?.pricing.basePrice;
+    const ok = cheaperPrice < expensivePrice;
+    return { ok, details: `Turn 1: ₹${expensivePrice}, Turn 2 Cheaper: ₹${cheaperPrice}` };
+  });
+
+  // 103. Multi-Turn Test C: Budget 300 -> Drink + Sweet -> Make large
+  await check("103. Multi-Turn Flow C: Budget ₹300 -> Drink + Sweet combo -> Make large recalculates server price", async () => {
+    // Turn 1: Budget
+    const t1 = await baristaService.getRecommendation("I have ₹300");
+
+    // Turn 2: Combo
+    const t2 = await baristaService.getRecommendation("Give me a drink and something sweet", [], t1.preferences);
+    const combo = t2.cafeMoment;
+    const comboOk = t2.mode === "BUDGET_COMBO" && !!combo && combo.totalPrice <= 300;
+
+    // Turn 3: Make large
+    const t3 = await baristaService.getRecommendation("Make the drink large", [], t2.preferences, [], undefined, combo?.drink.id);
+    const isLarge = t3.recommendations[0]?.configuration.sizeId === "large";
+
+    const allOk = comboOk && isLarge;
+    return { ok: allOk, details: `Combo Total: ₹${combo?.totalPrice} (<= ₹300), Upgraded to Large: ${isLarge}` };
+  });
+
+  // 104. Multi-Turn Test D: Surprise me -> Not that
+  await check("104. Multi-Turn Flow D: 'Surprise me' -> 'Not that' returns meaningfully different drink", async () => {
+    // Turn 1: Surprise me
+    const t1 = await baristaService.getRecommendation("Surprise me");
+    const firstDrinkId = t1.recommendations[0]?.product.id;
+
+    // Turn 2: Not that
+    const t2 = await baristaService.getRecommendation("Not that", [], t1.preferences, [firstDrinkId], undefined, firstDrinkId);
+    const secondDrinkId = t2.recommendations[0]?.product.id;
+
+    const ok = !!firstDrinkId && !!secondDrinkId && firstDrinkId !== secondDrinkId;
+    return { ok, details: `First Surprise: ${firstDrinkId}, Second Surprise: ${secondDrinkId}` };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {

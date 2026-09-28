@@ -264,6 +264,7 @@ export class CatalogService {
       category: "pastry" | "cookie" | "cake" | "savory";
       description: string;
       whyItWorks: string;
+      pairingPrice?: number;
     }>
   > {
     const product = await this.getProductByIdOrSlug(idOrSlug);

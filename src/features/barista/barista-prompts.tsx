@@ -10,6 +10,12 @@ interface BaristaPromptsProps {
 
 const PROMPT_CHIPS = [
   {
+    icon: Sparkles,
+    category: "Priciest",
+    prompt: "Which coffee costs the most?",
+    shortLabel: "Primiest Coffee",
+  },
+  {
     icon: Zap,
     category: "Cheapest",
     prompt: "What is the cheapest coffee?",
@@ -17,9 +23,9 @@ const PROMPT_CHIPS = [
   },
   {
     icon: Heart,
-    category: "Budget",
-    prompt: "What can I get under ₹200?",
-    shortLabel: "Drinks Under ₹200",
+    category: "Café Moment",
+    prompt: "Coffee and something sweet under ₹300",
+    shortLabel: "Combo Under ₹300",
   },
   {
     icon: Flame,
@@ -36,7 +42,7 @@ const PROMPT_CHIPS = [
   {
     icon: Sparkles,
     category: "Surprise",
-    prompt: "Surprise me with something random!",
+    prompt: "Surprise me with something unexpected!",
     shortLabel: "Surprise Me",
   },
   {
