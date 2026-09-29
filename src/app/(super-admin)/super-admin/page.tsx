@@ -811,7 +811,7 @@ function SuperAdminDashboardContent() {
                 </div>
                 <div className="p-4 rounded-2xl bg-[#F7F1E7]/60 text-xs text-[#3A2418] space-y-2">
                   <p>• Role tampering blocked: <code>PATCH /users/me</code> denies role modifications.</p>
-                  <p>• Public signup is constrained strictly to <code>role: "customer"</code>.</p>
+                  <p>• Public signup is constrained strictly to <code>role: &quot;customer&quot;</code>.</p>
                   <p>• Operational role elevation is only permitted through authorized Super Admin / Admin controllers.</p>
                 </div>
               </div>

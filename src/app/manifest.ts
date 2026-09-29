@@ -4,11 +4,11 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "AI CAFÉ — Your Drink. Your Way.",
     short_name: "AI CAFÉ",
-    description: "Specialty coffee house combining handcrafted drinks with intuitive AI personalization.",
+    description: "Specialty coffee house combining handcrafted drinks with intuitive AI personalization. Crafted by AI. Inspired by You.",
     start_url: "/",
     display: "standalone",
-    background_color: "#120905",
-    theme_color: "#2A1810",
+    background_color: "#F7F1E7",
+    theme_color: "#3A2418",
     icons: [
       {
         src: "/icon",

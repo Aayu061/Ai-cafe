@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { AuthProvider } from "@/features/auth/context/auth-context";
-import { BootScreen } from "@/components/boot/boot-screen";
+import { BrandOpeningScreen } from "@/components/loading/brand-opening-screen";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import "./globals.css";
 
@@ -98,7 +98,7 @@ export default function RootLayout({
         </a>
 
         <AuthProvider>
-          <BootScreen />
+          <BrandOpeningScreen />
           <div id="main-content">{children}</div>
           <CookieNotice />
         </AuthProvider>

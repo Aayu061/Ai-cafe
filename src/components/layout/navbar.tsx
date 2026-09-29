@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { Logo } from "@/components/brand/logo";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -59,39 +60,27 @@ export function Navbar() {
         )}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          {/* Brand Logo */}
+          {/* Brand Logo System: Desktop [LOGO] AI CAFÉ, Mobile [LOGO] */}
           <Link
             href="/"
-            className="group flex items-center gap-2.5 focus:outline-none"
+            className="group flex items-center focus:outline-none"
             aria-label="AI Café Home"
           >
-            <div
-              className={cn(
-                "w-9 h-9 rounded-full flex items-center justify-center transition-colors shadow-sm",
-                isScrolled
-                  ? "bg-espresso text-cream group-hover:bg-caramel group-hover:text-espresso"
-                  : "bg-cream/90 text-espresso backdrop-blur group-hover:bg-caramel"
-              )}
-            >
-              <Sparkles className="w-4 h-4" />
+            {/* Desktop Full Lockup */}
+            <div className="hidden sm:flex items-center">
+              <Logo
+                variant="default"
+                theme={isScrolled ? "espresso" : "cream"}
+                size={34}
+              />
             </div>
-            <div className="flex flex-col">
-              <span
-                className={cn(
-                  "font-serif font-bold tracking-wider text-lg transition-colors leading-none",
-                  isScrolled ? "text-espresso" : "text-cream"
-                )}
-              >
-                {BRAND.name}
-              </span>
-              <span
-                className={cn(
-                  "text-[9px] uppercase tracking-widest font-sans font-medium mt-0.5",
-                  isScrolled ? "text-warmgray" : "text-cream/80"
-                )}
-              >
-                Specialty & AI
-              </span>
+            {/* Mobile Symbol Lockup */}
+            <div className="flex sm:hidden items-center">
+              <Logo
+                variant="symbol"
+                theme={isScrolled ? "espresso" : "cream"}
+                size={30}
+              />
             </div>
           </Link>
 

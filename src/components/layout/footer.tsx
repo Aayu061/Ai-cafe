@@ -6,6 +6,7 @@ import { Container } from "./container";
 import { BRAND, NAV_ITEMS } from "@/lib/constants";
 import { Sparkles, ArrowRight, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/logo";
 
 export function Footer() {
   return (
@@ -14,13 +15,8 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12 mb-16">
           {/* Column 1: Brand & Tagline */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-9 h-9 rounded-full bg-caramel text-espresso flex items-center justify-center shadow-soft">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <span className="font-serif font-bold text-2xl tracking-wider text-cream">
-                {BRAND.name}
-              </span>
+            <div className="mb-4">
+              <Logo variant="default" theme="cream" size={38} />
             </div>
 
             <p className="font-serif text-lg text-cream/90 italic mb-2">

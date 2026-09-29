@@ -736,7 +736,7 @@ function PairingsBlock({ pairings }: { pairings: BaristaPairingItem[] }) {
     <div className="bg-white rounded-3xl p-6 border border-espresso/10 shadow-soft space-y-4">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-caramel-dark pb-2 border-b border-espresso/10">
         <Utensils className="w-4 h-4 text-caramel" />
-        <span>Chef's Recommended Café Pairings</span>
+        <span>Chef&apos;s Recommended Café Pairings</span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

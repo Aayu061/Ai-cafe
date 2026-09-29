@@ -213,7 +213,7 @@ function StaffDashboardContent() {
                 )}
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Today's Orders ({orders.length})</span>
+                <span>Today&apos;s Orders ({orders.length})</span>
               </button>
 
               <button
