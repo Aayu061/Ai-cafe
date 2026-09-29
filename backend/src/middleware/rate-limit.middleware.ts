@@ -4,18 +4,19 @@ interface RateLimitRecord {
   timestamps: number[];
 }
 
-interface RateLimitOptions {
+export interface RateLimitOptions {
   windowMs: number;
   maxRequests: number;
   message?: string;
+  name?: string;
 }
 
 /**
  * In-memory sliding window rate limiter middleware factory.
- * Lightweight, zero-dependency, suitable for protecting LLM endpoints from abuse.
+ * Lightweight, zero-dependency, suitable for protecting API endpoints from abuse.
  */
 export function createRateLimiter(options: RateLimitOptions) {
-  const { windowMs, maxRequests, message = "Too many requests. Please slow down." } = options;
+  const { windowMs, maxRequests, message = "Too many requests. Please slow down.", name = "general" } = options;
   const ipMap = new Map<string, RateLimitRecord>();
 
   // Periodically clean up stale IPs every 5 minutes to prevent memory leaks
@@ -44,10 +45,11 @@ export function createRateLimiter(options: RateLimitOptions) {
       req.socket.remoteAddress ||
       "unknown-client";
 
-    let record = ipMap.get(ip);
+    const key = `${name}:${ip}`;
+    let record = ipMap.get(key);
     if (!record) {
       record = { timestamps: [] };
-      ipMap.set(ip, record);
+      ipMap.set(key, record);
     }
 
     // Filter out timestamps outside the current sliding window
@@ -78,7 +80,38 @@ export function createRateLimiter(options: RateLimitOptions) {
  * Standard Barista rate limiter: 10 requests per 60 seconds per IP
  */
 export const baristaRateLimiter = createRateLimiter({
+  name: "barista",
   windowMs: 60 * 1000,
   maxRequests: 10,
   message: "Too many recommendation requests. Please wait a moment before consulting the barista again.",
+});
+
+/**
+ * Authentication & Profile sync rate limiter: 25 requests per 60 seconds per IP
+ */
+export const authRateLimiter = createRateLimiter({
+  name: "auth",
+  windowMs: 60 * 1000,
+  maxRequests: 25,
+  message: "Too many authentication requests. Please wait a moment before trying again.",
+});
+
+/**
+ * Admin sensitive mutation rate limiter: 20 requests per 60 seconds per IP
+ */
+export const adminSensitiveRateLimiter = createRateLimiter({
+  name: "admin-sensitive",
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+  message: "Administrative rate limit exceeded. Please wait a moment.",
+});
+
+/**
+ * Test rate limiter for automated security test verification: 2 requests per 5 seconds
+ */
+export const testStrictRateLimiter = createRateLimiter({
+  name: "test-limiter",
+  windowMs: 5 * 1000,
+  maxRequests: 2,
+  message: "Test rate limit threshold reached.",
 });

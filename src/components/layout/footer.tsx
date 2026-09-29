@@ -120,15 +120,15 @@ export function Footer() {
         <div className="pt-8 border-t border-cream/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-cream/50">
           <p>© {new Date().getFullYear()} AI CAFÉ. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <span className="hover:text-cream transition-colors cursor-pointer">
+            <Link href="/privacy" className="hover:text-cream transition-colors">
               Privacy Policy
-            </span>
-            <span className="hover:text-cream transition-colors cursor-pointer">
+            </Link>
+            <Link href="/terms" className="hover:text-cream transition-colors">
               Terms of Service
-            </span>
-            <span className="hover:text-cream transition-colors cursor-pointer">
-              AI Transparency
-            </span>
+            </Link>
+            <Link href="/contact" className="hover:text-cream transition-colors">
+              Contact & Flagship
+            </Link>
           </div>
         </div>
       </Container>

@@ -68,6 +68,22 @@ export class BaristaService {
       rejectedProductIds.push(intentResult.referenceResolution.resolvedProductId);
     }
 
+    // 2.5 Security Defusal Handler (Adversarial Prompt Injections, Privilege Escalations, Fake Prices)
+    if (intentResult.isSecurityDefusal) {
+      return {
+        success: true,
+        mode: "CONVERSATION",
+        intent: "recommend",
+        message:
+          intentResult.securityDefusalMessage ||
+          "I am your AI Café Concierge. I can only assist with our authentic café menu, pairings, and drink customization.",
+        preferences: incomingPreferences || {},
+        moodContext,
+        recommendations: [],
+        followUpSuggestion: "Would you like me to recommend a handcrafted cold brew or artisan latte from today's menu?",
+      };
+    }
+
     // 3. Handle GREETING mode immediately
     if (mode === "GREETING") {
       return {

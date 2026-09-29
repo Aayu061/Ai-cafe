@@ -24,6 +24,8 @@ export interface IntentDetectionResult {
   isRejection?: boolean;
   isSurprise?: boolean;
   sizeUpgrade?: string;
+  isSecurityDefusal?: boolean;
+  securityDefusalMessage?: string;
 }
 
 export class IntentEngine {
@@ -52,6 +54,19 @@ export class IntentEngine {
       lastRecommendations,
       lastActiveProductId
     );
+
+    // 0.2 PROMPT INJECTION & SECURITY PROBE DEFENSE
+    const injectionCheck = this.detectPromptInjection(text);
+    if (injectionCheck.isInjection) {
+      return {
+        intent: "recommend",
+        mode: "CONVERSATION",
+        confidence: 1.0,
+        moodContext,
+        isSecurityDefusal: true,
+        securityDefusalMessage: injectionCheck.explanation,
+      };
+    }
 
     // 1. GREETING (e.g. "hi", "hello", "good morning", "hey barista")
     if (
@@ -685,6 +700,79 @@ export class IntentEngine {
     if (text.includes("matcha") || text.includes("tea")) return "matcha";
     if (text.includes("coffee")) return "coffee";
     return null;
+  }
+
+  /**
+   * Identifies adversarial prompt injection attacks, system prompt leakage attempts,
+   * privilege escalation probes, and authoritative price manipulation attempts.
+   */
+  private detectPromptInjection(text: string): { isInjection: boolean; explanation?: string } {
+    // 1. System prompt leakage / developer instruction extraction
+    if (
+      /\b(ignore (all )?previous instructions|disregard (all )?prior instructions|reveal (your |the )?system prompt|show (me )?(your |the )?system prompt|what is your system prompt|tell me your system prompt|print your system instructions|developer instructions|reveal your prompt|what were you told to do)\b/i.test(
+        text
+      )
+    ) {
+      return {
+        isInjection: true,
+        explanation:
+          "I am your AI Café Concierge dedicated to crafting and recommending beverages from our authentic café menu. My internal system instructions and operational parameters are protected and cannot be disclosed.",
+      };
+    }
+
+    // 2. Secret API keys & credential probing
+    if (
+      /\b(admin credentials|super_admin password|secret api key|gemini api key|firebase credentials|service account key|reveal (the )?password|give me (the )?credentials|show me (the )?api key)\b/i.test(
+        text
+      )
+    ) {
+      return {
+        isInjection: true,
+        explanation:
+          "I do not have access to administrative credentials, server API keys, or private system secrets. As a café concierge, I can only assist with beverages, recipes, and menu pairings.",
+      };
+    }
+
+    // 3. Privilege escalation / role tampering attempts
+    if (
+      /\b(change my role to super_admin|make me an admin|grant me super_admin|elevate my role|escalate my permissions|grant me admin privileges|give me admin access)\b/i.test(
+        text
+      )
+    ) {
+      return {
+        isInjection: true,
+        explanation:
+          "I cannot modify account roles, permissions, or administrative access. User roles and governance are strictly managed by authorized administrators through our security architecture.",
+      };
+    }
+
+    // 4. Authoritative price / catalog tampering
+    if (
+      /\b(override (the )?price|pretend this (product |drink )?costs|make this (drink |product )?(cost )?₹?1\b|give it to me for free|set the price to ₹?0|fake price)\b/i.test(
+        text
+      )
+    ) {
+      return {
+        isInjection: true,
+        explanation:
+          "All beverage and item pricing is server-authoritative and determined exclusively by our live café catalog. I cannot alter, override, or negotiate menu pricing.",
+      };
+    }
+
+    // 5. Invent fake non-existent products
+    if (
+      /\b(create a product that doesn't exist|invent a (new )?product|fabricate a drink)\b/i.test(
+        text
+      )
+    ) {
+      return {
+        isInjection: true,
+        explanation:
+          "I only recommend and customize real products available on our actual café menu. I cannot fabricate non-existent products.",
+      };
+    }
+
+    return { isInjection: false };
   }
 }
 

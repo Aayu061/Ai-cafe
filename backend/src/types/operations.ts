@@ -68,6 +68,8 @@ export interface AuditLog {
 
 export type OrderStatus = "new" | "preparing" | "ready" | "completed" | "cancelled";
 
+export type PaymentStatus = "unpaid" | "processing" | "paid" | "failed" | "refunded";
+
 export interface OrderItem {
   productId: string;
   productName: string;
@@ -84,10 +86,50 @@ export interface OrderDoc {
   customerEmail: string;
   items: OrderItem[];
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
   subtotal: number;
   tax: number;
   total: number;
+  paymentOrderId?: string;
+  paymentTransactionId?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Phase 8 Smart Cart Interface Contracts
+ */
+export interface CartItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  finalPrice: number;
+  recipeConfiguration?: Record<string, unknown>;
+  configurationSummary: string;
+}
+
+export interface CartDoc {
+  id: string;
+  userId: string;
+  items: CartItem[];
+  itemCount: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  updatedAt: string;
+}
+
+/**
+ * Server-authoritative contract for Phase 8 payment gateway handshake
+ */
+export interface ServerPriceVerificationContract {
+  orderId: string;
+  userId: string;
+  serverCalculatedAmount: number;
+  currency: "INR";
+  verificationHash: string;
+  timestamp: string;
 }

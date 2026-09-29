@@ -58,6 +58,18 @@ export function errorHandler(
     return;
   }
 
+  // Handle malformed JSON request body
+  if (err instanceof SyntaxError && "body" in err && (err as { status?: number }).status === 400) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: "MALFORMED_JSON_PAYLOAD",
+        message: "The request body contains invalid or malformed JSON.",
+      },
+    });
+    return;
+  }
+
   // Handle Zod schema validation errors
   if (err instanceof ZodError) {
     res.status(400).json({

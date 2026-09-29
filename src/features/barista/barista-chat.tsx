@@ -447,6 +447,7 @@ export function BaristaChat() {
               id="barista-drink-input"
               name="baristaDrinkInput"
               type="text"
+              aria-label="Ask your AI Barista Concierge"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Ask anything (e.g. 'which coffee costs the most?', 'coffee & snack under ₹300', 'make it strong')..."
@@ -463,6 +464,7 @@ export function BaristaChat() {
             type="submit"
             variant="primary"
             size="md"
+            aria-label="Send message to AI Barista"
             onClick={(e) => {
               e.preventDefault();
               handleSend();
