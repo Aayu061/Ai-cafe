@@ -19,7 +19,9 @@ import {
   Coffee,
   Check,
   RotateCcw,
+  ShoppingBag,
 } from "lucide-react";
+import { useCart } from "@/features/cart/cart-context";
 
 // Catalog option item interface
 interface OptionItem {
@@ -140,6 +142,34 @@ function BuilderContent() {
     chill: 80,
     richness: 75,
   });
+
+  const { addItem } = useCart();
+
+  const handleAddDrinkToCart = () => {
+    const sizeName = SIZES.find((s) => s.id === selectedSize)?.name.split(" ")[0] || selectedSize;
+    const milkName = MILKS.find((m) => m.id === selectedMilk)?.name || selectedMilk;
+    const flavorName = selectedFlavor !== "none" ? FLAVORS.find((f) => f.id === selectedFlavor)?.name : undefined;
+    const summaryParts = [sizeName, milkName, flavorName].filter(Boolean);
+    const summary = `${currentProduct.name} (${summaryParts.join(" • ")})`;
+
+    addItem({
+      productId: currentProduct.id,
+      productName: currentProduct.name,
+      quantity: 1,
+      unitPrice: serverPrice,
+      configuration: {
+        productId: currentProduct.id,
+        baseId: selectedBase,
+        milkId: selectedMilk,
+        flavorId: selectedFlavor,
+        sweetnessId: selectedSweetness,
+        iceId: selectedIce,
+        toppingIds: selectedToppings,
+        sizeId: selectedSize,
+      },
+      configurationSummary: summary,
+    });
+  };
 
   // Current active product info
   const currentProduct =
@@ -654,10 +684,10 @@ function BuilderContent() {
                     size="md"
                     disabled={isValidating}
                     className="flex-1 sm:flex-initial gap-2 shadow-card"
-                    onClick={() => alert("Drink customization saved! Cart & Checkout will be enabled in Phase 5.")}
+                    onClick={handleAddDrinkToCart}
                   >
-                    <Sparkles className="w-4 h-4 text-caramel" />
-                    <span>Save Recipe</span>
+                    <ShoppingBag className="w-4 h-4 text-caramel" />
+                    <span>Add to Tray</span>
                   </Button>
                 </div>
               </div>

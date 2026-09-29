@@ -5,8 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { BaristaRecommendation } from "@/types/barista";
 import { DnaRadar } from "./dna-radar";
-import { Sparkles, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Coffee } from "lucide-react";
+import { Sparkles, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Coffee, ShoppingBag, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCart } from "@/features/cart/cart-context";
+import { formatPrice } from "@/lib/utils";
 
 interface RecommendationCardProps {
   recommendation: BaristaRecommendation;
@@ -75,7 +77,31 @@ export function RecommendationCard({
   rankIndex,
 }: RecommendationCardProps) {
   const [showFullDna, setShowFullDna] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+  const { addItem } = useCart();
   const { product, configuration, reason, drinkDna, pricing, matchScore } = recommendation;
+
+  const handleAddRecommendedToCart = () => {
+    addItem({
+      productId: product.id,
+      productName: product.name,
+      quantity: 1,
+      unitPrice: pricing.finalPrice,
+      configuration: {
+        productId: product.id,
+        baseId: configuration.baseId,
+        milkId: configuration.milkId,
+        flavorId: configuration.flavorId,
+        sweetnessId: configuration.sweetnessId,
+        iceId: configuration.iceId,
+        toppingIds: configuration.toppingIds,
+        sizeId: configuration.sizeId,
+      },
+      configurationSummary: `AI Barista Recipe • ${configuration.sizeId || "Regular"}`,
+    });
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1200);
+  };
 
   // Build prefill URL for /builder
   const query = new URLSearchParams({
@@ -237,19 +263,40 @@ export function RecommendationCard({
       <div className="px-6 py-4 bg-espresso/5 border-t border-espresso/10 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-espresso/70">
           <CheckCircle2 className="w-4 h-4 text-sage shrink-0" />
-          <span>Validated by Server Pricing Engine</span>
+          <span>Validated: {formatPrice(pricing.finalPrice)}</span>
         </div>
 
-        <Link href={builderUrl} className="w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Link href={builderUrl} className="flex-1 sm:flex-initial">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5 text-xs font-semibold border-espresso/20 hover:border-caramel hover:text-espresso"
+            >
+              <span>Customize</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </Link>
+
           <Button
             variant={isTopMatch ? "primary" : "secondary"}
             size="sm"
-            className="w-full sm:w-auto gap-2 text-xs font-semibold shadow-soft"
+            onClick={handleAddRecommendedToCart}
+            className="flex-1 sm:flex-initial gap-1.5 text-xs font-semibold shadow-soft"
           >
-            <span>Customize in Studio</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            {justAdded ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-sage" />
+                <span>Added</span>
+              </>
+            ) : (
+              <>
+                <ShoppingBag className="w-3.5 h-3.5 text-caramel" />
+                <span>Add to Tray</span>
+              </>
+            )}
           </Button>
-        </Link>
+        </div>
       </div>
     </div>
   );

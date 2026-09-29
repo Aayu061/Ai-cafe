@@ -29,6 +29,8 @@ env.local
 enc.local
 *.env
 *.local
+APIKey.csv
+*.csv
 
 # Media recordings & archive temp
 *.mp4

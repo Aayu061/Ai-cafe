@@ -9,6 +9,8 @@ dist/
 .env.local
 .env.*.local
 *.env
+APIKey.csv
+*.csv
 
 # Service Account Keys (NEVER COMMIT FIREBASE KEYS)
 service-account*.json

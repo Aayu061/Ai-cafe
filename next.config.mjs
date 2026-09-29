@@ -10,13 +10,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://apis.google.com https://www.gstatic.com https://*.firebaseapp.com;
+  script-src 'self' 'unsafe-eval' 'unsafe-inline' https://apis.google.com https://www.gstatic.com https://*.firebaseapp.com https://sdk.cashfree.com https://*.cashfree.com;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com data:;
   img-src 'self' data: blob: https://*.googleusercontent.com https://firebasestorage.googleapis.com;
   media-src 'self' data: blob:;
-  connect-src 'self' http://localhost:5000 http://localhost:5001 https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.firebaseapp.com https://*.onrender.com;
-  frame-src 'self' https://*.firebaseapp.com https://accounts.google.com;
+  connect-src 'self' http://localhost:5000 http://localhost:5001 https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.firebaseapp.com https://*.onrender.com https://*.cashfree.com https://sdk.cashfree.com;
+  frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://*.cashfree.com;
   object-src 'none';
   base-uri 'self';
   form-action 'self';

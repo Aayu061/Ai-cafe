@@ -11,7 +11,8 @@ import { Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/profile";
+  const rawRedirect = searchParams.get("redirect") || "/dashboard";
+  const redirectUrl = rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/dashboard";
 
   const { signIn, signInWithGoogle } = useAuth();
 

@@ -414,6 +414,8 @@ export class CatalogService {
       errors.push(`Product "${product.name}" is currently unavailable.`);
     }
 
+    const toppingsList = Array.isArray(config.toppingIds) ? config.toppingIds : [];
+
     // 2. Fetch All Selected Ingredients
     const requiredIds = [
       config.baseId,
@@ -422,8 +424,8 @@ export class CatalogService {
       config.sweetnessId,
       config.iceId,
       config.sizeId,
-      ...config.toppingIds,
-    ];
+      ...toppingsList,
+    ].filter(Boolean) as string[];
 
     const ingredientMap = new Map<string, IngredientDoc>();
 
@@ -510,7 +512,7 @@ export class CatalogService {
 
     // 9. Verify Toppings
     const validatedToppings: IngredientDoc[] = [];
-    for (const toppingId of config.toppingIds) {
+    for (const toppingId of toppingsList) {
       const topping = ingredientMap.get(toppingId);
       if (!topping) {
         errors.push(`Invalid topping ID: "${toppingId}".`);

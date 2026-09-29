@@ -85,7 +85,7 @@ export interface CustomerAccount {
   lastLoginAt?: string;
   tasteProfile?: Record<string, unknown>;
   favorites?: string[];
-  savedCreations?: string[];
+  savedCreations?: any[];
   preferences?: {
     favoriteBases?: string[];
     preferredMilk?: string;
@@ -158,7 +158,7 @@ export interface UserDocument {
   employeeId?: string;
   tasteProfile?: Record<string, unknown>;
   favorites?: string[];
-  savedCreations?: string[];
+  savedCreations?: any[];
   preferences?: {
     favoriteBases?: string[];
     preferredMilk?: string;

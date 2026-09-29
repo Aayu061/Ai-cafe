@@ -22,6 +22,18 @@ const envSchema = z.object({
     .optional()
     .transform((val) => (val ? val.trim().replace(/^["']|["']$/g, "") : undefined)),
   AI_MODEL: z.string().default("gemini-2.5-flash"),
+
+  // Cashfree Payments Configuration (Server-Side Only - Sandbox Lock)
+  CASHFREE_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
+  CASHFREE_APP_ID: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.trim().replace(/^["']|["']$/g, "") : undefined)),
+  CASHFREE_SECRET_KEY: z
+    .string()
+    .optional()
+    .transform((val) => (val ? val.trim().replace(/^["']|["']$/g, "") : undefined)),
+  CASHFREE_API_VERSION: z.string().default("2025-01-01"),
 });
 
 const parsed = envSchema.safeParse(process.env);

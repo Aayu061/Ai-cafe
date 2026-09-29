@@ -9,11 +9,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Logo } from "@/components/brand/logo";
+import { useCart } from "@/features/cart/cart-context";
+import { CartDrawer } from "@/components/cart/cart-drawer";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [cartCount] = useState(0);
+  const { cartCount, setIsCartOpen } = useCart();
 
   const { user, userProfile, loading, signOut } = useAuth();
 
@@ -36,6 +38,9 @@ export function Navbar() {
 
   const navItems = React.useMemo(() => {
     const items = [...NAV_ITEMS];
+    if (user) {
+      items.push({ label: "Orders", href: "/orders" });
+    }
     if (role === "staff") {
       items.push({ label: "Staff Hub", href: "/staff", badge: "STAFF" });
     } else if (role === "admin" || role === "super_admin") {
@@ -47,7 +52,7 @@ export function Navbar() {
       });
     }
     return items;
-  }, [role]);
+  }, [role, user]);
 
   return (
     <>
@@ -127,6 +132,7 @@ export function Navbar() {
             {/* Cart with Badge */}
             <button
               type="button"
+              onClick={() => setIsCartOpen(true)}
               className={cn(
                 "relative p-2 rounded-full transition-colors focus:outline-none",
                 isScrolled
@@ -155,7 +161,7 @@ export function Navbar() {
               </div>
             ) : user ? (
               <div className="flex items-center gap-2">
-                <Link href="/profile">
+                <Link href="/dashboard">
                   <Button
                     variant={isScrolled ? "primary" : "secondary"}
                     size="sm"
@@ -204,6 +210,7 @@ export function Navbar() {
           <div className="flex sm:hidden items-center gap-3">
             <button
               type="button"
+              onClick={() => setIsCartOpen(true)}
               className={cn(
                 "relative p-2 rounded-full focus:outline-none",
                 isScrolled ? "text-espresso" : "text-cream"
@@ -211,6 +218,11 @@ export function Navbar() {
               aria-label={`Cart with ${cartCount} items`}
             >
               <ShoppingBag className="w-5 h-5" />
+              {cartCount > 0 ? (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-caramel text-espresso text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
+                  {cartCount}
+                </span>
+              ) : null}
             </button>
 
             <button
@@ -255,31 +267,51 @@ export function Navbar() {
                 </Link>
               ))}
 
-              <div className="pt-4 flex flex-col gap-3">
+              <div className="pt-4 flex flex-col gap-2">
                 {user ? (
                   <>
                     <Link
+                      href="/dashboard"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-3 py-2 rounded-xl bg-caramel/15 text-espresso font-semibold flex items-center justify-between text-sm"
+                    >
+                      <span>Dashboard & Tracker</span>
+                      <User className="w-4 h-4 text-caramel" />
+                    </Link>
+
+                    <div className="grid grid-cols-2 gap-2 my-1">
+                      <Link
+                        href="/favorites"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="px-3 py-2 rounded-xl bg-offwhite border border-espresso/10 text-xs font-medium text-espresso text-center"
+                      >
+                        Favorites
+                      </Link>
+                      <Link
+                        href="/saved-drinks"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="px-3 py-2 rounded-xl bg-offwhite border border-espresso/10 text-xs font-medium text-espresso text-center"
+                      >
+                        Saved Drinks
+                      </Link>
+                    </div>
+
+                    <Link
                       href="/profile"
                       onClick={() => setMobileMenuOpen(false)}
+                      className="px-3 py-2 rounded-xl bg-offwhite border border-espresso/10 text-xs font-medium text-espresso text-center"
                     >
-                      <Button
-                        variant="primary"
-                        size="md"
-                        className="w-full justify-center gap-2"
-                      >
-                        <User className="w-4 h-4 text-caramel" />
-                        <span>Profile ({displayName.split(" ")[0]})</span>
-                      </Button>
+                      Profile Settings
                     </Link>
 
                     <Button
                       variant="outline"
-                      size="md"
+                      size="sm"
                       onClick={() => {
                         signOut();
                         setMobileMenuOpen(false);
                       }}
-                      className="w-full justify-center gap-2 border-espresso/20 text-espresso"
+                      className="w-full justify-center gap-2 border-espresso/20 text-espresso mt-2"
                     >
                       <LogOut className="w-4 h-4 text-caramel" />
                       <span>Sign Out</span>
@@ -305,6 +337,9 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Slide-out Order Cart Drawer */}
+      <CartDrawer />
     </>
   );
 }

@@ -40,6 +40,16 @@ export async function apiFetch<T = unknown>(
     }
   }
 
+  // Inject guest session ID if present
+  if (typeof window !== "undefined") {
+    let guestSession = sessionStorage.getItem("ai_cafe_guest_session_id");
+    if (!guestSession) {
+      guestSession = `guest-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      sessionStorage.setItem("ai_cafe_guest_session_id", guestSession);
+    }
+    headers["x-guest-session-id"] = guestSession;
+  }
+
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const targetUrl = `${BACKEND_URL}${cleanEndpoint}`;
 
@@ -90,5 +100,53 @@ export async function recommendDrink(
   });
 
   return response as unknown as BaristaRecommendResponse;
+}
+
+/**
+ * Customer Commerce API Helpers
+ */
+export async function fetchFavorites() {
+  return apiFetch<{ favorites: any[] }>("/api/favorites");
+}
+
+export async function addFavoriteApi(productId: string) {
+  return apiFetch<{ favorites: string[] }>(`/api/favorites/${productId}`, {
+    method: "POST",
+  });
+}
+
+export async function removeFavoriteApi(productId: string) {
+  return apiFetch<{ favorites: string[] }>(`/api/favorites/${productId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchSavedDrinks() {
+  return apiFetch<{ savedDrinks: any[] }>("/api/saved-drinks");
+}
+
+export async function saveDrinkApi(payload: {
+  name: string;
+  configuration: any;
+  notes?: string;
+}) {
+  return apiFetch<{ savedDrink: any }>("/api/saved-drinks", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSavedDrinkApi(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/saved-drinks/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchCustomerOrders() {
+  return apiFetch<{ orders: any[] }>("/api/orders");
+}
+
+export async function fetchOrderById(orderId: string) {
+  return apiFetch<{ order: any }>(`/api/orders/${orderId}`);
 }
 

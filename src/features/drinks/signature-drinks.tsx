@@ -8,6 +8,8 @@ import { DrinkItem, DrinkCategory } from "@/types";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-client";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 type FilterTab = "all" | DrinkCategory;
 
@@ -127,12 +129,25 @@ export function SignatureDrinks() {
             <p className="text-sm font-serif">Loading café catalog...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredDrinks.map((drink) => (
-              <DrinkCard key={drink.id} drink={drink} />
-            ))}
-          </div>
-        )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {filteredDrinks.map((drink) => (
+                <DrinkCard key={drink.id} drink={drink} />
+              ))}
+            </div>
+          )}
+
+        {/* See Full Menu CTA */}
+        <div className="mt-14 text-center">
+          <Link href="/menu">
+            <Button
+              variant="outline"
+              size="lg"
+              className="gap-2 border-espresso/25 hover:border-caramel hover:text-espresso shadow-soft px-8 py-3 text-sm font-semibold rounded-full"
+            >
+              <span>See Full Menu →</span>
+            </Button>
+          </Link>
+        </div>
       </Container>
     </section>
   );

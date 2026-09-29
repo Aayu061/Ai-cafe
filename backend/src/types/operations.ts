@@ -66,9 +66,33 @@ export interface AuditLog {
   createdAt: string;
 }
 
-export type OrderStatus = "new" | "preparing" | "ready" | "completed" | "cancelled";
+export type OrderStatus =
+  | "new"
+  | "preparing"
+  | "ready"
+  | "completed"
+  | "cancelled"
+  | "PENDING_PAYMENT"
+  | "PAID"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "READY"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "REFUND_PENDING"
+  | "REFUNDED";
 
-export type PaymentStatus = "unpaid" | "processing" | "paid" | "failed" | "refunded";
+export type PaymentStatus =
+  | "unpaid"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "CREATED"
+  | "PENDING"
+  | "SUCCESS"
+  | "FAILED"
+  | "CANCELLED";
 
 export interface OrderItem {
   productId: string;
@@ -77,6 +101,7 @@ export interface OrderItem {
   unitPrice: number;
   finalPrice: number;
   configurationSummary: string;
+  recipeConfiguration?: Record<string, unknown>;
 }
 
 export interface OrderDoc {
@@ -84,14 +109,21 @@ export interface OrderDoc {
   userId: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
   items: OrderItem[];
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   subtotal: number;
+  discount?: number;
   tax: number;
   total: number;
+  currency?: string;
   paymentOrderId?: string;
+  cashfreeOrderId?: string;
+  paymentSessionId?: string;
+  paymentId?: string;
   paymentTransactionId?: string;
+  fulfillmentType?: "dine-in" | "takeaway" | "curbside";
   notes?: string;
   createdAt: string;
   updatedAt: string;

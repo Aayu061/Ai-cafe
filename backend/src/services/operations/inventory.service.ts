@@ -128,13 +128,20 @@ export class InventoryService {
         const db = getFirebaseAdminDb();
         const snap = await db.collection("inventory").get();
         if (!snap.empty) {
-          return snap.docs.map((d) => {
-            const data = d.data() as InventoryItem;
-            return {
-              ...data,
-              status: deriveInventoryStatus(data.quantity, data.reorderThreshold),
-            };
+          const map = new Map<string, InventoryItem>();
+          this.memoryInventory.forEach((item, id) => {
+            map.set(id, { ...item, status: deriveInventoryStatus(item.quantity, item.reorderThreshold) });
           });
+          snap.docs.forEach((d) => {
+            const data = d.data() as InventoryItem;
+            const itemId = data.id || d.id;
+            map.set(itemId, {
+              ...data,
+              id: itemId,
+              status: deriveInventoryStatus(data.quantity, data.reorderThreshold),
+            });
+          });
+          return Array.from(map.values());
         }
       } catch (err) {
         console.warn("[InventoryService]: Firestore read failed, using memory:", (err as Error).message);

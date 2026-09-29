@@ -1,4 +1,13 @@
-export type DrinkCategory = "cold-brew" | "frappe" | "espresso" | "tea" | "smoothie";
+export type DrinkCategory =
+  | "cold-brew"
+  | "frappe"
+  | "espresso"
+  | "tea"
+  | "smoothie"
+  | "coffee"
+  | "bakery"
+  | "savory"
+  | "refresher";
 
 export interface DrinkItem {
   id: string;
@@ -13,6 +22,8 @@ export interface DrinkItem {
   calories?: number;
   temperature: "Iced" | "Hot" | "Blended";
   tasteNotes: string[];
+  pairings?: string[];
+  productType?: "drink" | "cake" | "bakery" | "snack" | "gourmet";
 }
 
 export type DrinkBase = "cold-brew" | "espresso" | "matcha" | "chai";

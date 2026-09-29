@@ -53,6 +53,7 @@ export function BaristaChat() {
   const [loadingStep, setLoadingStep] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [isLoginRequired, setIsLoginRequired] = useState(false);
 
   // Multi-turn Preference Accumulation, Repetition Tracking & Active Context
   const [currentPreferences, setCurrentPreferences] = useState<BaristaPreferences>({});
@@ -128,7 +129,10 @@ export function BaristaChat() {
       );
 
       if (res.error) {
-        if (res.error.code === "RATE_LIMITED") {
+        if (res.error.code === "AI_LOGIN_REQUIRED") {
+          setIsLoginRequired(true);
+          setErrorMsg(res.error.message || "You've had a taste. Sign in to keep exploring your café.");
+        } else if (res.error.code === "RATE_LIMITED") {
           setIsRateLimited(true);
           setErrorMsg(
             res.error.message ||
@@ -412,7 +416,35 @@ export function BaristaChat() {
         )}
 
         {/* Error Notification Banner */}
-        {errorMsg && (
+        {isLoginRequired ? (
+          <div className="rounded-3xl bg-caramel/10 border-2 border-caramel/30 p-6 text-espresso flex flex-col sm:flex-row items-center justify-between gap-4 shadow-card">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-caramel/20 flex items-center justify-center text-caramel shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-serif font-bold text-base text-espresso">
+                  You&apos;ve had a taste. Sign in to keep exploring your café.
+                </p>
+                <p className="text-xs text-warmgray mt-0.5">
+                  Guest consultation limit reached (3/3). Create a free account or sign in to continue unlimited personalized barista recommendations.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              <Link href="/login?redirect=/barista" className="flex-1 sm:flex-initial">
+                <Button variant="primary" size="sm" className="w-full">
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/login?mode=signup&redirect=/barista" className="flex-1 sm:flex-initial">
+                <Button variant="outline" size="sm" className="w-full border-espresso/20">
+                  Create Account
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ) : errorMsg ? (
           <div className="rounded-2xl bg-red-50 border border-red-200 p-4 text-red-900 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div className="flex-1 text-xs sm:text-sm">
@@ -420,7 +452,7 @@ export function BaristaChat() {
               <p className="mt-0.5 text-red-800/90 leading-relaxed">{errorMsg}</p>
             </div>
           </div>
-        )}
+        ) : null}
 
         <div ref={messagesEndRef} />
       </div>

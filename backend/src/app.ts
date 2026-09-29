@@ -11,6 +11,8 @@ import { baristaRoutes } from "./routes/barista.routes";
 import { staffRoutes } from "./routes/staff.routes";
 import { adminRoutes } from "./routes/admin.routes";
 import { superAdminRoutes } from "./routes/super-admin.routes";
+import { orderRoutes } from "./routes/order.routes";
+import { paymentRoutes } from "./routes/payment.routes";
 import { testStrictRateLimiter } from "./middleware/rate-limit.middleware";
 import { sanitizePayload } from "./utils/sanitize";
 
@@ -50,12 +52,22 @@ export function createApp(): Express {
     next();
   });
 
-  // 3. Body Parsing Middleware with Strict Payload Size Limits
-  app.use(express.json({ limit: "1mb" }));
+  // 3. Body Parsing Middleware with Strict Payload Size Limits & Raw Body Retention
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf.toString("utf8");
+      },
+    })
+  );
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-  // 4. Input Sanitization (Cleanse XSS and dangerous script tags)
+  // 4. Input Sanitization (Cleanse XSS and dangerous script tags, exempting raw webhooks)
   app.use((req: Request, _res: Response, next: NextFunction) => {
+    if (req.path.includes("/webhook")) {
+      return next();
+    }
     if (req.body && typeof req.body === "object") {
       req.body = sanitizePayload(req.body);
     }
@@ -95,6 +107,8 @@ export function createApp(): Express {
   app.use("/api/staff", staffRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/super-admin", superAdminRoutes);
+  app.use("/api", orderRoutes);
+  app.use("/api", paymentRoutes);
 
   // Dedicated test rate limit route for automated verification
   app.get("/api/test-rate-limit", testStrictRateLimiter, (_req: Request, res: Response) => {

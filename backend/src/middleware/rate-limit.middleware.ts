@@ -11,11 +11,16 @@ export interface RateLimitOptions {
   name?: string;
 }
 
+export interface RateLimiterMiddleware {
+  (req: Request, res: Response, next: NextFunction): void;
+  reset: () => void;
+}
+
 /**
  * In-memory sliding window rate limiter middleware factory.
  * Lightweight, zero-dependency, suitable for protecting API endpoints from abuse.
  */
-export function createRateLimiter(options: RateLimitOptions) {
+export function createRateLimiter(options: RateLimitOptions): RateLimiterMiddleware {
   const { windowMs, maxRequests, message = "Too many requests. Please slow down.", name = "general" } = options;
   const ipMap = new Map<string, RateLimitRecord>();
 
@@ -35,10 +40,10 @@ export function createRateLimiter(options: RateLimitOptions) {
     cleanupInterval.unref();
   }
 
-  return function rateLimiter(req: Request, res: Response, next: NextFunction): void {
+  const limiter: any = function rateLimiter(req: Request, res: Response, next: NextFunction): void {
     const now = Date.now();
-    // Resolve client IP (respecting reverse proxies like Render / Vercel)
-    const forwarded = req.headers["x-forwarded-for"];
+    // Resolve client IP (respecting reverse proxies like Render / Vercel, and x-test-ip for hermetic test execution)
+    const forwarded = req.headers["x-test-ip"] || req.headers["x-forwarded-for"];
     const ip =
       (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : undefined) ||
       req.ip ||
@@ -74,6 +79,12 @@ export function createRateLimiter(options: RateLimitOptions) {
     record.timestamps.push(now);
     next();
   };
+
+  limiter.reset = () => {
+    ipMap.clear();
+  };
+
+  return limiter as RateLimiterMiddleware;
 }
 
 /**
@@ -115,3 +126,13 @@ export const testStrictRateLimiter = createRateLimiter({
   maxRequests: 2,
   message: "Test rate limit threshold reached.",
 });
+
+/**
+ * Helper to reset all in-memory rate limiters (useful for test suites)
+ */
+export function resetAllRateLimiters(): void {
+  baristaRateLimiter.reset();
+  authRateLimiter.reset();
+  adminSensitiveRateLimiter.reset();
+  testStrictRateLimiter.reset();
+}
