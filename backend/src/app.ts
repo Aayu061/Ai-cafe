@@ -103,6 +103,7 @@ export function createApp(): Express {
 
   // 7. Mount Routes
   app.use("/health", healthRoutes);
+  app.use("/api/health", healthRoutes);
   app.use("/api", userRoutes);
   app.use("/api", catalogRoutes);
   app.use("/api/barista", baristaRoutes);
