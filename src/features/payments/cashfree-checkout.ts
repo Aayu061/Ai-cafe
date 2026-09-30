@@ -88,7 +88,6 @@ export async function loadCashfreeScript(timeoutMs = 10000): Promise<void> {
     const script = document.createElement("script");
     script.src = CASHFREE_SDK_URL;
     script.async = true;
-    script.crossOrigin = "anonymous";
 
     script.onload = () => {
       cleanup();
