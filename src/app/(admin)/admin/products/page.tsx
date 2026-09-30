@@ -13,6 +13,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api-config";
 
 interface ProductItem {
   id: string;
@@ -40,7 +41,7 @@ export default function AdminProductsPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/products", {
+      const res = await fetch(apiUrl("/api/admin/products"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -65,7 +66,7 @@ export default function AdminProductsPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch(`http://localhost:5001/api/admin/products/${productId}/availability`, {
+      const res = await fetch(apiUrl(`/api/admin/products/${productId}/availability`), {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,

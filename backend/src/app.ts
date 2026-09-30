@@ -77,8 +77,10 @@ export function createApp(): Express {
   // 5. CORS Configuration
   const allowedOrigins = [
     env.FRONTEND_URL,
-    "http://localhost:3000", // Ensure local Next.js dev server is supported
-  ].filter(Boolean);
+    "https://ai-cafe-zeta.vercel.app", // Production Vercel deployment — always allowed
+    "http://localhost:3000",            // Local Next.js dev server
+    "http://localhost:3001",            // Alternate local dev port
+  ].filter(Boolean) as string[];
 
   app.use(
     cors({
@@ -92,7 +94,7 @@ export function createApp(): Express {
       },
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "x-test-role", "x-test-uid", "x-test-status", "x-test-domain", "x-test-enforce-ratelimit"],
+      allowedHeaders: ["Content-Type", "Authorization", "x-guest-session-id", "x-test-role", "x-test-uid", "x-test-status", "x-test-domain", "x-test-enforce-ratelimit"],
     })
   );
 
@@ -100,7 +102,7 @@ export function createApp(): Express {
   app.use(requestLogger);
 
   // 7. Mount Routes
-  app.use(["/health", "/health%20", "/health "], healthRoutes);
+  app.use("/health", healthRoutes);
   app.use("/api", userRoutes);
   app.use("/api", catalogRoutes);
   app.use("/api/barista", baristaRoutes);

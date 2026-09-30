@@ -4,6 +4,7 @@ import { auth } from "@/lib/firebase/auth";
 import { db } from "@/lib/firebase/firestore";
 import { app, EXPECTED_PROJECT_ID } from "@/lib/firebase/client";
 import { UserDocument } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 /**
  * Diagnostic logger matching all 9 inspection points required for diagnosis
@@ -141,7 +142,7 @@ export async function getUserDocument(uid: string): Promise<UserDocument | null>
   // 3. Try checking backend /api/me first if available for authoritative resolution
   try {
     const token = await auth.currentUser.getIdToken();
-    const res = await fetch("http://localhost:5001/api/me", {
+    const res = await fetch(apiUrl("/api/me"), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {

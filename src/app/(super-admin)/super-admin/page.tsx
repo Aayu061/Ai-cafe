@@ -29,6 +29,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/api-config";
 
 type SuperAdminTab =
   | "overview"
@@ -111,7 +112,7 @@ function SuperAdminDashboardContent() {
   const fetchOverview = async () => {
     try {
       const token = await getAuthToken();
-      const res = await fetch("http://localhost:5001/api/super-admin/overview", {
+      const res = await fetch(apiUrl("/api/super-admin/overview"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -126,7 +127,7 @@ function SuperAdminDashboardContent() {
   const fetchAdmins = async () => {
     try {
       const token = await getAuthToken();
-      const res = await fetch("http://localhost:5001/api/super-admin/admins", {
+      const res = await fetch(apiUrl("/api/super-admin/admins"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -141,7 +142,7 @@ function SuperAdminDashboardContent() {
   const fetchStaff = async () => {
     try {
       const token = await getAuthToken();
-      const res = await fetch("http://localhost:5001/api/admin/staff", {
+      const res = await fetch(apiUrl("/api/admin/staff"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -156,7 +157,7 @@ function SuperAdminDashboardContent() {
   const fetchAuditLogs = async () => {
     try {
       const token = await getAuthToken();
-      const res = await fetch("http://localhost:5001/api/admin/audit-logs", {
+      const res = await fetch(apiUrl("/api/admin/audit-logs"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -193,7 +194,7 @@ function SuperAdminDashboardContent() {
     setActionLoading(true);
     try {
       const token = await getAuthToken();
-      const res = await fetch("http://localhost:5001/api/super-admin/admins", {
+      const res = await fetch(apiUrl("/api/super-admin/admins"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -233,7 +234,7 @@ function SuperAdminDashboardContent() {
     setActionLoading(true);
     try {
       const token = await getAuthToken();
-      const res = await fetch(`http://localhost:5001/api/super-admin/admins/${targetUid}/status`, {
+      const res = await fetch(apiUrl(`/api/super-admin/admins/${targetUid}/status`), {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,

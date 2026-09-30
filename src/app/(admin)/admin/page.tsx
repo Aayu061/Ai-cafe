@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api-config";
 
 interface AdminAnalyticsData {
   totalOrders: number;
@@ -35,7 +36,7 @@ export default function AdminOverviewPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/analytics", {
+      const res = await fetch(apiUrl("/api/admin/analytics"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

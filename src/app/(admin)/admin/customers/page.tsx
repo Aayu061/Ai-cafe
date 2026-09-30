@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Users, RotateCw, Search, Shield, CheckCircle2, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserDocument, UserStatus } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 export default function AdminCustomersPage() {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ export default function AdminCustomersPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/customers", {
+      const res = await fetch(apiUrl("/api/admin/customers"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -42,7 +43,7 @@ export default function AdminCustomersPage() {
     const newStatus: UserStatus = currentStatus === "active" ? "suspended" : "active";
     try {
       const token = await user?.getIdToken();
-      const res = await fetch(`http://localhost:5001/api/admin/customers/${customerUid}/status`, {
+      const res = await fetch(apiUrl(`/api/admin/customers/${customerUid}/status`), {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,

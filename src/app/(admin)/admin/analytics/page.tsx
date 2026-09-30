@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { BarChart3, TrendingUp, RotateCw, AlertCircle, ShoppingBag, Coffee, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/api-config";
 
 interface AnalyticsSummary {
   totalOrders: number;
@@ -23,7 +24,7 @@ export default function AdminAnalyticsPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/analytics", {
+      const res = await fetch(apiUrl("/api/admin/analytics"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

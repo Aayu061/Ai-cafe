@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { InventoryItem, OrderDoc, OrderStatus } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 type StaffTab = "orders" | "inventory" | "profile";
 
@@ -46,7 +47,7 @@ function StaffDashboardContent() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/staff/orders", {
+      const res = await fetch(apiUrl("/api/staff/orders"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -65,7 +66,7 @@ function StaffDashboardContent() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/staff/inventory", {
+      const res = await fetch(apiUrl("/api/staff/inventory"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -91,7 +92,7 @@ function StaffDashboardContent() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch(`http://localhost:5001/api/staff/orders/${orderId}`, {
+      const res = await fetch(apiUrl(`/api/staff/orders/${orderId}`), {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,

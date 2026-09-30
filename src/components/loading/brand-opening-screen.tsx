@@ -6,6 +6,7 @@ import { LogoMark } from "@/components/brand/logo-mark";
 import { BRAND } from "@/lib/constants";
 import { BootTasks, BootTaskStatus } from "@/types/brand";
 import { ArrowRight, RefreshCw, AlertCircle } from "lucide-react";
+import { apiUrl } from "@/lib/api-config";
 
 interface BrandOpeningScreenProps {
   onBootComplete?: () => void;
@@ -128,8 +129,7 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
       setStatusMessage("Preparing the menu...");
       setProgressPercent(65);
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        const catalogPromise = fetch(`${apiUrl}/api/products`, { cache: "force-cache" });
+        const catalogPromise = fetch(apiUrl("/api/products"), { cache: "force-cache" });
         const timeoutPromise = new Promise<Response>((_, reject) =>
           setTimeout(() => reject(new Error("Catalog Timeout")), 3000)
         );
@@ -144,8 +144,7 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
       setStatusMessage("Warming up the AI Barista...");
       setProgressPercent(85);
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        const healthPromise = fetch(`${apiUrl}/health`);
+        const healthPromise = fetch(apiUrl("/health"));
         const timeoutPromise = new Promise<Response>((_, reject) =>
           setTimeout(() => reject(new Error("AI Health Timeout")), 2500)
         );

@@ -1,11 +1,12 @@
 import { BRAND, NAV_ITEMS } from "@/lib/constants";
+import { API_BASE_URL } from "@/lib/api-config";
 
 export const siteConfig = {
   name: BRAND.name,
   tagline: BRAND.tagline,
   supporting: BRAND.supporting,
   url: process.env.NEXT_PUBLIC_SITE_URL || "https://ai-cafe-zeta.vercel.app",
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+  apiUrl: API_BASE_URL,
   navItems: NAV_ITEMS,
   colors: {
     cream: "#F7F1E7",

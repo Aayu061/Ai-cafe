@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderDoc, OrderStatus } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 export default function AdminOrdersPage() {
   const { user } = useAuth();
@@ -24,7 +25,7 @@ export default function AdminOrdersPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/orders", {
+      const res = await fetch(apiUrl("/api/admin/orders"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InventoryItem, InventoryMovement, InventoryMovementType } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 export default function AdminInventoryPage() {
   const { user } = useAuth();
@@ -36,7 +37,7 @@ export default function AdminInventoryPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/inventory", {
+      const res = await fetch(apiUrl("/api/admin/inventory"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -54,7 +55,7 @@ export default function AdminInventoryPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/inventory/movements", {
+      const res = await fetch(apiUrl("/api/admin/inventory/movements"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -80,7 +81,7 @@ export default function AdminInventoryPage() {
     setAdjusting(true);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/inventory/adjust", {
+      const res = await fetch(apiUrl("/api/admin/inventory/adjust"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

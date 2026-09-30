@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 import { Settings, Shield, ScrollText, RotateCw, CheckCircle2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuditLog } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 export default function AdminSettingsPage() {
   const { user, userProfile } = useAuth();
@@ -16,7 +17,7 @@ export default function AdminSettingsPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/audit-logs", {
+      const res = await fetch(apiUrl("/api/admin/audit-logs"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

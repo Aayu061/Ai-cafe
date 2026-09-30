@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 import { ShieldCheck, RotateCw, UserPlus, Shield, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserDocument, UserRole } from "@/types";
+import { apiUrl } from "@/lib/api-config";
 
 export default function AdminStaffPage() {
   const { user, userProfile } = useAuth();
@@ -20,7 +21,7 @@ export default function AdminStaffPage() {
     try {
       if (!user) return;
       const token = await user.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/staff", {
+      const res = await fetch(apiUrl("/api/admin/staff"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -47,7 +48,7 @@ export default function AdminStaffPage() {
     setAssigning(true);
     try {
       const token = await user?.getIdToken();
-      const res = await fetch("http://localhost:5001/api/admin/staff/role", {
+      const res = await fetch(apiUrl("/api/admin/staff/role"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

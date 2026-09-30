@@ -1,12 +1,14 @@
 import { auth } from "@/lib/firebase/auth";
 import { BaristaRecommendResponse } from "@/types/barista";
+import { API_BASE_URL } from "@/lib/api-config";
 
 /**
  * Frontend API Client Helper
  * Configured for communication with the Express backend on Render / local development.
+ * Uses the centralized API_BASE_URL — never hardcode localhost directly here.
  */
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const BACKEND_URL = API_BASE_URL;
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
