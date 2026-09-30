@@ -2918,6 +2918,71 @@ async function runTests() {
     return { ok: deductedOnce, details: `Before: ${stockBefore}, After 1st: ${stockAfterFirst}, After 2nd: ${stockAfterSecond} (Idempotent: ${stockAfterFirst === stockAfterSecond})` };
   });
 
+  // 193. CORS Preflight: OPTIONS /api/me returns 204 with exact origin and credentials
+  await check("193. CORS: OPTIONS /api/me preflight returns 204 with allowed origin and credentials", async () => {
+    const res = await fetch(`${baseUrl}/api/me`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://ai-cafe-zeta.vercel.app",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+      },
+    });
+
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const allowCreds = res.headers.get("access-control-allow-credentials");
+    const ok = res.status === 204 && allowOrigin === "https://ai-cafe-zeta.vercel.app" && allowCreds === "true";
+    return { ok, details: `Status: ${res.status}, Origin: ${allowOrigin}, Creds: ${allowCreds}` };
+  });
+
+  // 194. CORS Error Response: Error responses attach CORS headers so browser can read JSON error
+  await check("194. CORS: GET /api/me without token returns 401 with Access-Control-Allow-Origin", async () => {
+    const res = await fetch(`${baseUrl}/api/me`, {
+      headers: {
+        Origin: "https://ai-cafe-zeta.vercel.app",
+      },
+    });
+
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const allowCreds = res.headers.get("access-control-allow-credentials");
+    const ok = res.status === 401 && allowOrigin === "https://ai-cafe-zeta.vercel.app" && allowCreds === "true";
+    return { ok, details: `Status: ${res.status}, Origin: ${allowOrigin}, Creds: ${allowCreds}` };
+  });
+
+  // 195. CORS Origin Security: Unauthorized origin does NOT receive Access-Control-Allow-Origin
+  await check("195. CORS Security: Unauthorized external origin does not receive access-control-allow-origin", async () => {
+    const res = await fetch(`${baseUrl}/api/me`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://unauthorized-attacker.example.com",
+        "Access-Control-Request-Method": "GET",
+      },
+    });
+
+    const allowOrigin = res.headers.get("access-control-allow-origin");
+    const ok = !allowOrigin || allowOrigin !== "https://unauthorized-attacker.example.com";
+    return { ok, details: `Status: ${res.status}, Allow-Origin: ${allowOrigin || "none (blocked)"}` };
+  });
+
+  // 196. Service Unavailability (503): Unconfigured Firebase Admin returns 503 with clean CORS
+  await check("196. Resilience: Unconfigured Firebase Admin returns HTTP 503 with clean CORS headers", async () => {
+    // Calling an operation that requires real Firebase Admin when credentials missing
+    const err = new (require("./config/firebase-admin").FirebaseAdminNotConfiguredError)("Testing 503 handling");
+    const mockReq: any = { headers: { origin: "https://ai-cafe-zeta.vercel.app" }, method: "GET", path: "/api/me" };
+    let statusSet = 0;
+    let jsonBody: any = null;
+    const mockHeaders: Record<string, string> = {};
+    const mockRes: any = {
+      setHeader: (k: string, v: string) => { mockHeaders[k.toLowerCase()] = v; },
+      status: (s: number) => { statusSet = s; return mockRes; },
+      json: (b: any) => { jsonBody = b; return mockRes; },
+    };
+
+    require("./middleware/error.middleware").errorHandler(err, mockReq, mockRes, () => {});
+    const ok = statusSet === 503 && jsonBody?.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED" && mockHeaders["access-control-allow-origin"] === "https://ai-cafe-zeta.vercel.app";
+    return { ok, details: `Status: ${statusSet}, Code: ${jsonBody?.error?.code}, CORS Origin: ${mockHeaders["access-control-allow-origin"]}` };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {

@@ -44,21 +44,36 @@ function initializeFirebaseAdmin(): void {
     // Option 1: Full JSON string via FIREBASE_SERVICE_ACCOUNT_KEY (Recommended for Render)
     if (env.FIREBASE_SERVICE_ACCOUNT_KEY) {
       try {
-        const parsedKey = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        let raw = env.FIREBASE_SERVICE_ACCOUNT_KEY.trim();
+        if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+          raw = raw.slice(1, -1);
+        }
+        let parsedKey: any;
+        try {
+          parsedKey = JSON.parse(raw);
+        } catch {
+          // Attempt base64 decode if raw wasn't plain JSON
+          const decoded = Buffer.from(raw, "base64").toString("utf8");
+          parsedKey = JSON.parse(decoded);
+        }
         credential = admin.credential.cert(parsedKey);
-        console.log("🔒 [Firebase Admin]: Configured via FIREBASE_SERVICE_ACCOUNT_KEY (JSON).");
+        console.log("🔒 [Firebase Admin]: Configured via FIREBASE_SERVICE_ACCOUNT_KEY.");
       } catch (jsonErr) {
         throw new Error(
-          `Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY as JSON: ${(jsonErr as Error).message}`
+          `Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY: ${(jsonErr as Error).message}`
         );
       }
     }
     // Option 2: Discrete fields via FIREBASE_CLIENT_EMAIL & FIREBASE_PRIVATE_KEY
     else if (env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) {
-      const formattedPrivateKey = env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
+      let key = env.FIREBASE_PRIVATE_KEY.trim();
+      if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+        key = key.slice(1, -1);
+      }
+      const formattedPrivateKey = key.replace(/\\n/g, "\n");
       credential = admin.credential.cert({
         projectId: env.FIREBASE_PROJECT_ID,
-        clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        clientEmail: env.FIREBASE_CLIENT_EMAIL.trim(),
         privateKey: formattedPrivateKey,
       });
       console.log("🔒 [Firebase Admin]: Configured via discrete FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY.");

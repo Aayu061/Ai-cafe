@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { env } from "../config/env";
+import { applyCorsHeaders } from "../utils/cors";
 import { FirebaseAdminNotConfiguredError } from "../config/firebase-admin";
 import { AiBaristaNotConfiguredError } from "../services/ai/ai-provider";
 import { GeminiApiError } from "../services/ai/gemini.provider";
@@ -19,6 +20,10 @@ export function errorHandler(
   _next: NextFunction
 ): void {
   const isProduction = env.NODE_ENV === "production";
+
+  // Ensure CORS headers are attached to every error response so browsers
+  // do not swallow 503, 500, or 401 payloads under a generic CORS error
+  applyCorsHeaders(req, res);
 
   // Handle AI Barista provider not configured
   if (err instanceof AiBaristaNotConfiguredError) {
@@ -44,14 +49,14 @@ export function errorHandler(
     return;
   }
 
-  // Handle Firebase Admin not configured
+  // Handle Firebase Admin not configured (503 Service Unavailable)
   if (err instanceof FirebaseAdminNotConfiguredError) {
-    res.status(500).json({
+    res.status(503).json({
       success: false,
       error: {
         code: "FIREBASE_ADMIN_NOT_CONFIGURED",
         message: isProduction
-          ? "Server authentication provider is currently unavailable."
+          ? "Server authentication provider is currently unavailable. Please verify Firebase Admin credentials."
           : err.message,
       },
     });

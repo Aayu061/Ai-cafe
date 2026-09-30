@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { env } from "./config/env";
+import { isOriginAllowed } from "./utils/cors";
 import { requestLogger } from "./middleware/logger.middleware";
 import { errorHandler } from "./middleware/error.middleware";
 import { notFoundHandler } from "./middleware/not-found.middleware";
@@ -18,6 +19,35 @@ import { sanitizePayload } from "./utils/sanitize";
 
 export function createApp(): Express {
   const app = express();
+
+  // 0. Primary CORS Middleware (Must precede all body parsers, timeouts, and route handlers)
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      },
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "x-guest-session-id",
+        "x-test-role",
+        "x-test-uid",
+        "x-test-status",
+        "x-test-domain",
+        "x-test-enforce-ratelimit",
+      ],
+      exposedHeaders: ["Retry-After"],
+      maxAge: 86400,
+    })
+  );
+
+  // Explicit preflight handler
+  app.options("*", cors());
 
   // 1. Security Headers Middleware (Production-Grade Hardening)
   app.use((_req: Request, res: Response, next: NextFunction) => {
@@ -74,34 +104,10 @@ export function createApp(): Express {
     next();
   });
 
-  // 5. CORS Configuration
-  const allowedOrigins = [
-    env.FRONTEND_URL,
-    "https://ai-cafe-zeta.vercel.app", // Production Vercel deployment — always allowed
-    "http://localhost:3000",            // Local Next.js dev server
-    "http://localhost:3001",            // Alternate local dev port
-  ].filter(Boolean) as string[];
-
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, curl, server-to-server)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin) || env.NODE_ENV === "development" || env.NODE_ENV === "test") {
-          return callback(null, true);
-        }
-        return callback(new Error(`Origin ${origin} not allowed by CORS`));
-      },
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "x-guest-session-id", "x-test-role", "x-test-uid", "x-test-status", "x-test-domain", "x-test-enforce-ratelimit"],
-    })
-  );
-
-  // 6. Structured Request Logging
+  // 5. Structured Request Logging
   app.use(requestLogger);
 
-  // 7. Mount Routes
+  // 6. Mount Routes
   app.use("/health", healthRoutes);
   app.use("/api/health", healthRoutes);
   app.use("/api", userRoutes);

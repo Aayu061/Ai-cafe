@@ -144,6 +144,7 @@ export async function getUserDocument(uid: string): Promise<UserDocument | null>
     const token = await auth.currentUser.getIdToken();
     const res = await fetch(apiUrl("/api/me"), {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(6000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -164,7 +165,7 @@ export async function getUserDocument(uid: string): Promise<UserDocument | null>
       }
     }
   } catch {
-    // Backend fetch failed or not reachable, fallback to direct Firestore inspection
+    // Backend fetch failed, timed out, or not reachable — fallback smoothly to direct Firestore inspection
   }
 
   // 4. Fallback: Direct Firestore domain lookup in hierarchy
