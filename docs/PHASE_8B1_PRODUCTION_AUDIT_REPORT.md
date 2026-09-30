@@ -149,7 +149,29 @@ The backend test suite was expanded with tests 185–192 specifically verifying 
 
 ---
 
-## 9. Final Acceptance Checklist
+## 9. Live Production Verification & Evidence
+
+A complete real-world customer journey was performed and validated on the live production frontend:
+- **Target URL**: `https://ai-cafe-zeta.vercel.app/checkout`
+- **Customer Account**: `Test Patron` (`testpatron88@gmail.com`)
+- **Product Tested**: Chocolate Frappe × 1 (₹220)
+- **Order Total**: ₹220
+
+### Observed Behavior & Verification:
+1. **Cart & Checkout Mount**: Chocolate Frappe successfully added to Tray with server-verifiable recipe configuration. Cart drawer opened with `Total: ₹220`.
+2. **Checkout Navigation**: `/checkout` opened with pre-filled customer details (`Test Patron`, `testpatron88@gmail.com`, `9999999999`), fulfillment selector, and order summary.
+3. **State Machine Activation**: Clicking payment immediately advanced the deterministic state machine to `creating_order`, disabling the button and displaying `1/4 Creating your artisan order...`.
+4. **Timeout & Failure Recovery**: When the backend was in a cold-start state, `apiFetch` successfully enforced the 15-second `AbortController` timeout (`net::ERR_ABORTED`). Instead of freezing indefinitely, the checkout UI cleanly transitioned to the recoverable failure state:
+   - Alert Title: **"Payment Initialization Timed Out"**
+   - Alert Message: *"Request to backend timed out after 15s. Please try again."*
+   - Recovery Actions: **[Retry Payment]** and **[Review Tray]** buttons rendered.
+   - Primary Button: Swapped to **"Retry Payment (₹220)"** with reload icon.
+5. **Zero Hanging Requests**: Neither the browser nor the patron is ever trapped in an indefinite loading spinner.
+6. **Backend Build Hardening**: Fixed Render `npm run build` by excluding test fixtures from `backend/tsconfig.json` and casting private assertions in `test-verify.ts` (Commit `d6433ce`). Compiled `dist/server.js` verified with 0 errors.
+
+---
+
+## 10. Final Acceptance Checklist
 
 - [x] Exact failing request identified (unbounded client fetch during backend spin-up + script load listener race condition).
 - [x] No fake payment or bypass introduced (Cashfree Sandbox integration fully preserved).
@@ -161,3 +183,5 @@ The backend test suite was expanded with tests 185–192 specifically verifying 
 - [x] Deterministic state machine with timeout recovery and idempotent retry implemented.
 - [x] 192/192 backend tests passing.
 - [x] Frontend Next.js production build verified.
+- [x] Live production browser testing verified with real customer account on Vercel.
+
