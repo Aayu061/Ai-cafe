@@ -105,17 +105,10 @@ export async function requireAuth(
     req.user = authenticatedUser;
     next();
   } catch (error: unknown) {
-    // Handle unconfigured Firebase Admin explicitly
+    // Handle unconfigured Firebase Admin explicitly via centralized error handler
     if (error instanceof FirebaseAdminNotConfiguredError) {
       console.error("❌ [Auth Middleware]: Cannot verify token because Firebase Admin is not configured.");
-      res.status(500).json({
-        success: false,
-        error: {
-          code: "FIREBASE_ADMIN_NOT_CONFIGURED",
-          message: "Firebase Admin SDK credentials are not configured on this server.",
-        },
-      });
-      return;
+      return next(error);
     }
 
     const err = error as { code?: string; message?: string };

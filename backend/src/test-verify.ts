@@ -86,11 +86,11 @@ async function runTests() {
         headers: { Authorization: "Bearer fake_token_value_abc_123" },
       });
       const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
-      // If credentials missing: 500 FIREBASE_ADMIN_NOT_CONFIGURED
+      // If credentials missing: 503 (or 500) FIREBASE_ADMIN_NOT_CONFIGURED
       // If credentials active: 401 INVALID_TOKEN
       const ok =
         (res.status === 401 && (body.error?.code === "INVALID_TOKEN" || body.error?.code === "UNAUTHORIZED")) ||
-        (res.status === 500 && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
+        ((res.status === 503 || res.status === 500) && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
       return { ok, details: `Status: ${res.status}, Code: ${body.error?.code} (${body.error?.message})` };
     }
   );
@@ -122,22 +122,22 @@ async function runTests() {
   });
 
   // 8. GET /api/products
-  await check("8. GET /api/products returns response (200 with catalog or 500 if unconfigured)", async () => {
+  await check("8. GET /api/products returns response (200 with catalog or 503/500 if unconfigured)", async () => {
     const res = await fetch(`${baseUrl}/api/products`);
     const body = (await res.json()) as { success: boolean; products?: unknown[]; error?: { code: string } };
     const ok =
       (res.status === 200 && Array.isArray(body.products)) ||
-      (res.status === 500 && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
+      ((res.status === 503 || res.status === 500) && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
     return { ok, details: `Status: ${res.status}, Success: ${body.success}` };
   });
 
   // 9. GET /api/ingredients
-  await check("9. GET /api/ingredients returns response (200 with list or 500 if unconfigured)", async () => {
+  await check("9. GET /api/ingredients returns response (200 with list or 503/500 if unconfigured)", async () => {
     const res = await fetch(`${baseUrl}/api/ingredients`);
     const body = (await res.json()) as { success: boolean; ingredients?: unknown[]; error?: { code: string } };
     const ok =
       (res.status === 200 && Array.isArray(body.ingredients)) ||
-      (res.status === 500 && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
+      ((res.status === 503 || res.status === 500) && body.error?.code === "FIREBASE_ADMIN_NOT_CONFIGURED");
     return { ok, details: `Status: ${res.status}, Success: ${body.success}` };
   });
 
