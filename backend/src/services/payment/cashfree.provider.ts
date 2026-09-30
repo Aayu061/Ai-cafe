@@ -132,6 +132,39 @@ export class CashfreeProvider implements IPaymentProvider {
         (data.message as string) ||
         (data.error as string) ||
         `Cashfree Order API returned status ${response.status}`;
+
+      // Check if order already exists in Cashfree (e.g. from customer retry)
+      const isAlreadyExists =
+        response.status === 409 ||
+        String(data.code || "").toLowerCase().includes("already_exists") ||
+        errorMsg.toLowerCase().includes("already exists");
+
+      if (isAlreadyExists) {
+        console.log(`[CashfreeProvider]: Order ${params.orderId} already exists in Cashfree, retrieving existing session...`);
+        try {
+          const getRes = await fetch(`${this.getBaseUrl()}/orders/${params.orderId}`, {
+            method: "GET",
+            headers,
+          });
+          if (getRes.ok) {
+            const existingOrder = (await getRes.json()) as Record<string, unknown>;
+            if (existingOrder.payment_session_id) {
+              return {
+                paymentSessionId: existingOrder.payment_session_id as string,
+                providerOrderId: String(existingOrder.cf_order_id || existingOrder.order_id || params.orderId),
+                orderId: params.orderId,
+                amount: typeof existingOrder.order_amount === "number" ? existingOrder.order_amount : params.amount,
+                currency: (existingOrder.order_currency as string) || params.currency || "INR",
+                provider: "cashfree",
+                environment: env.CASHFREE_ENVIRONMENT === "production" ? "production" : "sandbox",
+              };
+            }
+          }
+        } catch (fetchErr) {
+          console.warn(`[CashfreeProvider]: Failed to fetch existing order ${params.orderId}:`, fetchErr);
+        }
+      }
+
       console.error(`[CashfreeProvider]: Failed to create payment order for ${params.orderId}:`, errorMsg);
       throw new PaymentGatewayError(`[Cashfree]: ${errorMsg}`);
     }

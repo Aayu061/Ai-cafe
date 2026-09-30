@@ -34,6 +34,11 @@ function initializeFirebaseAdmin(): void {
     state.app = admin.apps[0]!;
     state.auth = admin.auth(state.app);
     state.db = admin.firestore(state.app);
+    try {
+      state.db.settings({ ignoreUndefinedProperties: true });
+    } catch {
+      // Ignored if settings already set
+    }
     state.isConfigured = true;
     return;
   }
@@ -86,6 +91,11 @@ function initializeFirebaseAdmin(): void {
       });
       state.auth = admin.auth(state.app);
       state.db = admin.firestore(state.app);
+      try {
+        state.db.settings({ ignoreUndefinedProperties: true });
+      } catch {
+        // Ignored if settings already set
+      }
       state.isConfigured = true;
       console.log(`✅ [Firebase Admin]: Initialized successfully for project "${env.FIREBASE_PROJECT_ID}".`);
     } else {

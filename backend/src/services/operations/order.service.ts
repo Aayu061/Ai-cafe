@@ -22,6 +22,13 @@ export interface CreateOrderParams {
   notes?: string;
 }
 
+function createOrderError(message: string, statusCode = 400, code = "ORDER_VALIDATION_FAILED") {
+  const err = new Error(message) as Error & { statusCode: number; code: string };
+  err.statusCode = statusCode;
+  err.code = code;
+  return err;
+}
+
 export class OrderService {
   private memoryOrders: Map<string, OrderDoc> = new Map();
 
@@ -81,7 +88,7 @@ export class OrderService {
    */
   async createOrder(params: CreateOrderParams): Promise<OrderDoc> {
     if (!params.items || params.items.length === 0) {
-      throw new Error("Cannot create order with an empty item list.");
+      throw createOrderError("Cannot create order with an empty item list.", 400, "ORDER_VALIDATION_FAILED");
     }
 
     const calculatedItems: OrderItem[] = [];
@@ -97,8 +104,10 @@ export class OrderService {
         // Validate with recipe pricing engine
         const validation = await catalogService.validateDrinkConfiguration(item.configuration);
         if (!validation.valid) {
-          throw new Error(
-            `Customization validation failed for product "${item.productId}": ${(validation.errors || []).join(", ")}`
+          throw createOrderError(
+            `Customization validation failed for product "${item.productId}": ${(validation.errors || []).join(", ")}`,
+            400,
+            "INVALID_DRINK_CONFIGURATION"
           );
         }
         unitPrice = validation.finalPrice;
@@ -111,10 +120,10 @@ export class OrderService {
         // Standard catalog item lookup
         const product = await catalogService.getProductByIdOrSlug(item.productId);
         if (!product) {
-          throw new Error(`Product "${item.productId}" not found in catalog.`);
+          throw createOrderError(`Product "${item.productId}" not found in catalog.`, 404, "PRODUCT_NOT_FOUND");
         }
         if (!product.available) {
-          throw new Error(`Product "${product.name}" is currently unavailable.`);
+          throw createOrderError(`Product "${product.name}" is currently unavailable.`, 400, "PRODUCT_UNAVAILABLE");
         }
         unitPrice = product.basePrice;
         productName = product.name;
@@ -151,7 +160,7 @@ export class OrderService {
       userId: params.userId,
       customerName: params.customerName,
       customerEmail: params.customerEmail,
-      customerPhone: params.customerPhone,
+      customerPhone: params.customerPhone || "",
       items: calculatedItems,
       status: "PENDING_PAYMENT",
       paymentStatus: "unpaid",
@@ -161,7 +170,7 @@ export class OrderService {
       total,
       currency: "INR",
       fulfillmentType: params.fulfillmentType || "takeaway",
-      notes: params.notes,
+      notes: params.notes || "",
       createdAt: now,
       updatedAt: now,
     };

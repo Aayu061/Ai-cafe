@@ -17,79 +17,99 @@ export class CatalogService {
    * Reads products from Cloud Firestore when configured, or INITIAL_PRODUCTS for local dev.
    */
   async getProducts(category?: string, featured?: boolean): Promise<ProductDoc[]> {
-    if (!isFirebaseAdminConfigured()) {
-      let prods = this.memoryProducts;
-      if (category) prods = prods.filter((p) => p.category === category);
-      if (typeof featured === "boolean") prods = prods.filter((p) => p.featured === featured);
-      return prods;
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const db = getFirebaseAdminDb();
+        let query: FirebaseFirestore.Query = db.collection("products");
+
+        if (category) {
+          query = query.where("category", "==", category);
+        }
+        if (typeof featured === "boolean") {
+          query = query.where("featured", "==", featured);
+        }
+
+        const snapshot = await query.get();
+        const docs = snapshot.docs.map((doc) => doc.data() as ProductDoc);
+        if (docs.length > 0) {
+          return docs;
+        }
+      } catch (err) {
+        console.warn("[CatalogService]: Firestore getProducts query failed, falling back to system catalog:", (err as Error).message);
+      }
     }
 
-    const db = getFirebaseAdminDb();
-    let query: FirebaseFirestore.Query = db.collection("products");
-
-    if (category) {
-      query = query.where("category", "==", category);
-    }
-    if (typeof featured === "boolean") {
-      query = query.where("featured", "==", featured);
-    }
-
-    const snapshot = await query.get();
-    return snapshot.docs.map((doc) => doc.data() as ProductDoc);
+    // Authoritative system catalog fallback ensures 100% availability even before or during Firestore sync
+    let prods = this.memoryProducts;
+    if (category) prods = prods.filter((p) => p.category === category);
+    if (typeof featured === "boolean") prods = prods.filter((p) => p.featured === featured);
+    return prods;
   }
 
   /**
    * Retrieves a single product by ID or slug from Cloud Firestore or local seed catalog.
    */
   async getProductByIdOrSlug(idOrSlug: string): Promise<ProductDoc | null> {
-    if (!isFirebaseAdminConfigured()) {
-      return (
-        INITIAL_PRODUCTS.find((p) => p.id === idOrSlug || p.slug === idOrSlug) || null
-      );
+    if (!idOrSlug) return null;
+
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const db = getFirebaseAdminDb();
+
+        // 1. Check by Document ID
+        const docRef = db.collection("products").doc(idOrSlug);
+        const docSnap = await docRef.get();
+
+        if (docSnap.exists) {
+          return docSnap.data() as ProductDoc;
+        }
+
+        // 2. Query by slug
+        const querySnap = await db
+          .collection("products")
+          .where("slug", "==", idOrSlug)
+          .limit(1)
+          .get();
+
+        if (!querySnap.empty && querySnap.docs[0]) {
+          return querySnap.docs[0].data() as ProductDoc;
+        }
+      } catch (err) {
+        console.warn(`[CatalogService]: Firestore lookup for product "${idOrSlug}" failed:`, (err as Error).message);
+      }
     }
 
-    const db = getFirebaseAdminDb();
-
-    // 1. Check by Document ID
-    const docRef = db.collection("products").doc(idOrSlug);
-    const docSnap = await docRef.get();
-
-    if (docSnap.exists) {
-      return docSnap.data() as ProductDoc;
-    }
-
-    // 2. Query by slug
-    const querySnap = await db
-      .collection("products")
-      .where("slug", "==", idOrSlug)
-      .limit(1)
-      .get();
-
-    if (!querySnap.empty && querySnap.docs[0]) {
-      return querySnap.docs[0].data() as ProductDoc;
-    }
-
-    return null;
+    // 3. Authoritative fallback to system catalog (guarantees product availability even if Firestore is unseeded)
+    return (
+      INITIAL_PRODUCTS.find((p) => p.id === idOrSlug || p.slug === idOrSlug) || null
+    );
   }
 
   /**
    * Reads ingredients from Cloud Firestore when configured, or INITIAL_INGREDIENTS for local dev.
    */
   async getIngredients(type?: string): Promise<IngredientDoc[]> {
-    if (!isFirebaseAdminConfigured()) {
-      if (type) return INITIAL_INGREDIENTS.filter((i) => i.type === type);
-      return INITIAL_INGREDIENTS;
+    if (isFirebaseAdminConfigured()) {
+      try {
+        const db = getFirebaseAdminDb();
+        let query: FirebaseFirestore.Query = db.collection("ingredients");
+
+        if (type) {
+          query = query.where("type", "==", type);
+        }
+
+        const snapshot = await query.get();
+        const docs = snapshot.docs.map((doc) => doc.data() as IngredientDoc);
+        if (docs.length > 0) {
+          return docs;
+        }
+      } catch (err) {
+        console.warn("[CatalogService]: Firestore getIngredients query failed, falling back to system ingredients:", (err as Error).message);
+      }
     }
 
-    const db = getFirebaseAdminDb();
-    let query: FirebaseFirestore.Query = db.collection("ingredients");
-
-    if (type) {
-      query = query.where("type", "==", type);
-    }
-
-    const snapshot = await query.get();
-    return snapshot.docs.map((doc) => doc.data() as IngredientDoc);
+    if (type) return INITIAL_INGREDIENTS.filter((i) => i.type === type);
+    return INITIAL_INGREDIENTS;
   }
 
   /**
@@ -430,18 +450,30 @@ export class CatalogService {
     const ingredientMap = new Map<string, IngredientDoc>();
 
     if (isFirebaseAdminConfigured()) {
-      const db = getFirebaseAdminDb();
-      const ingredientsCol = db.collection("ingredients");
-      const uniqueIds = Array.from(new Set(requiredIds));
-      const ingredientSnaps = await Promise.all(
-        uniqueIds.map((id) => ingredientsCol.doc(id).get())
-      );
-      ingredientSnaps.forEach((snap, idx) => {
-        const targetId = uniqueIds[idx];
-        if (snap.exists && targetId) {
-          ingredientMap.set(targetId, snap.data() as IngredientDoc);
-        }
-      });
+      try {
+        const db = getFirebaseAdminDb();
+        const ingredientsCol = db.collection("ingredients");
+        const uniqueIds = Array.from(new Set(requiredIds));
+        const ingredientSnaps = await Promise.all(
+          uniqueIds.map((id) => ingredientsCol.doc(id).get())
+        );
+        ingredientSnaps.forEach((snap, idx) => {
+          const targetId = uniqueIds[idx];
+          if (snap.exists && targetId) {
+            ingredientMap.set(targetId, snap.data() as IngredientDoc);
+          } else if (targetId) {
+            const fallback = INITIAL_INGREDIENTS.find((i) => i.id === targetId);
+            if (fallback) {
+              ingredientMap.set(targetId, fallback);
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("[CatalogService]: Firestore ingredient batch fetch failed, using system fallback:", (err as Error).message);
+        INITIAL_INGREDIENTS.forEach((ing) => {
+          ingredientMap.set(ing.id, ing);
+        });
+      }
     } else {
       INITIAL_INGREDIENTS.forEach((ing) => {
         ingredientMap.set(ing.id, ing);
@@ -716,6 +748,45 @@ export class CatalogService {
     actorRole: UserRole
   ): Promise<ProductDoc> {
     return this.updateProduct(id, { available }, actorId, actorRole);
+  }
+
+  /**
+   * Automatically populates Cloud Firestore with initial products and ingredients
+   * if the collections are currently empty.
+   */
+  async ensureCatalogSeeded(): Promise<void> {
+    if (!isFirebaseAdminConfigured()) {
+      return;
+    }
+
+    try {
+      const db = getFirebaseAdminDb();
+      const productSample = await db.collection("products").limit(1).get();
+      if (productSample.empty) {
+        console.log("🌱 [CatalogService]: Firestore 'products' collection is empty. Seeding initial catalog...");
+        const batch = db.batch();
+        for (const product of INITIAL_PRODUCTS) {
+          const ref = db.collection("products").doc(product.id);
+          batch.set(ref, product);
+        }
+        await batch.commit();
+        console.log(`✅ [CatalogService]: Successfully seeded ${INITIAL_PRODUCTS.length} products to Firestore.`);
+      }
+
+      const ingredientSample = await db.collection("ingredients").limit(1).get();
+      if (ingredientSample.empty) {
+        console.log("🌱 [CatalogService]: Firestore 'ingredients' collection is empty. Seeding initial ingredients...");
+        const batch = db.batch();
+        for (const ingredient of INITIAL_INGREDIENTS) {
+          const ref = db.collection("ingredients").doc(ingredient.id);
+          batch.set(ref, ingredient);
+        }
+        await batch.commit();
+        console.log(`✅ [CatalogService]: Successfully seeded ${INITIAL_INGREDIENTS.length} ingredients to Firestore.`);
+      }
+    } catch (err) {
+      console.warn("⚠️ [CatalogService]: Auto-seed encountered an issue (seamless catalog fallback active):", (err as Error).message);
+    }
   }
 }
 

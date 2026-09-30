@@ -1,6 +1,7 @@
 import { app } from "./app";
 import { env } from "./config/env";
 import { isFirebaseAdminConfigured } from "./config/firebase-admin";
+import { catalogService } from "./services/catalog.service";
 
 const PORT = env.PORT;
 const HOST = "0.0.0.0"; // Bind to 0.0.0.0 for containerized / Render environments
@@ -19,6 +20,11 @@ const server = app.listen(PORT, HOST, () => {
   );
   console.log(`🌐 Allowed Frontend:    ${env.FRONTEND_URL}`);
   console.log("==================================================");
+
+  // Auto-seed Firestore catalog if unseeded
+  catalogService.ensureCatalogSeeded().catch((err) => {
+    console.warn("⚠️ [CatalogService]: Startup catalog seed check error:", err.message);
+  });
 });
 
 // Graceful shutdown handling

@@ -2983,6 +2983,93 @@ async function runTests() {
     return { ok, details: `Status: ${statusSet}, Code: ${jsonBody?.error?.code}, CORS Origin: ${mockHeaders["access-control-allow-origin"]}` };
   });
 
+  // 197. Customer Checkout: Chocolate Frappe (₹220) creates order with authoritative server pricing
+  await check("197. Customer Checkout: Chocolate Frappe creates order with authoritative ₹220 server price", async () => {
+    const res = await fetch(`${baseUrl}/api/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-customer",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            productId: "chocolate-frappe",
+            quantity: 1,
+            configurationSummary: "Standard Barista Recipe • Regular",
+          },
+        ],
+        customerName: "Test Patron",
+        customerEmail: "testpatron88@gmail.com",
+        customerPhone: "9999999999",
+        fulfillmentType: "takeaway",
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; order: { id: string; total: number; status: string; items: any[] } };
+    const ok =
+      res.status === 201 &&
+      body.success === true &&
+      body.order?.total === 220 &&
+      body.order?.status === "PENDING_PAYMENT" &&
+      body.order?.items[0]?.productId === "chocolate-frappe" &&
+      body.order?.items[0]?.finalPrice === 220;
+    return {
+      ok,
+      details: `Status: ${res.status}, OrderId: ${body.order?.id}, Server Total: ₹${body.order?.total}, Status: ${body.order?.status}`,
+    };
+  });
+
+  // 198. Catalog Resilience: getProductByIdOrSlug resolves Chocolate Frappe even with unseeded Firestore
+  await check("198. Catalog Resilience: getProductByIdOrSlug seamlessly resolves Chocolate Frappe (₹220)", async () => {
+    const { catalogService } = require("./services/catalog.service");
+    const product = await catalogService.getProductByIdOrSlug("chocolate-frappe");
+    const ok = Boolean(product && product.id === "chocolate-frappe" && product.basePrice === 220 && product.available === true);
+    return {
+      ok,
+      details: `Product: ${product?.name}, ID: ${product?.id}, Price: ₹${product?.basePrice}, Available: ${product?.available}`,
+    };
+  });
+
+  // 199. Structured Error Handling: Unknown product returns HTTP 404 PRODUCT_NOT_FOUND
+  await check("199. Structured Error Handling: Non-existent product returns HTTP 404 PRODUCT_NOT_FOUND", async () => {
+    const res = await fetch(`${baseUrl}/api/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-customer",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [{ productId: "non-existent-drink-xyz", quantity: 1 }],
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 404 && body.error?.code === "PRODUCT_NOT_FOUND";
+    return {
+      ok,
+      details: `Status: ${res.status}, Code: ${body.error?.code}, Message: ${body.error?.message}`,
+    };
+  });
+
+  // 200. Structured Error Handling: Empty items list returns HTTP 400 ORDER_VALIDATION_FAILED
+  await check("200. Structured Error Handling: Empty items payload returns HTTP 400 ORDER_VALIDATION_FAILED", async () => {
+    const res = await fetch(`${baseUrl}/api/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-token-customer",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [],
+      }),
+    });
+    const body = (await res.json()) as { success: boolean; error: { code: string; message: string } };
+    const ok = res.status === 400 && (body.error?.code === "ORDER_VALIDATION_FAILED" || body.error?.code === "VALIDATION_ERROR");
+    return {
+      ok,
+      details: `Status: ${res.status}, Code: ${body.error?.code}, Message: ${body.error?.message}`,
+    };
+  });
+
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);
 
   server.close((err) => {
