@@ -17,6 +17,7 @@ export function useHeroFrames() {
   );
   const [firstFrameLoaded, setFirstFrameLoaded] = useState<boolean>(false);
   const [loadedCount, setLoadedCount] = useState<number>(0);
+  const totalLoadedRef = useRef<number>(0);
 
   const queueRef = useRef<number[]>([]);
   const activeDownloadsRef = useRef<number>(0);
@@ -45,7 +46,13 @@ export function useHeroFrames() {
       activeDownloadsRef.current--;
       if (!isCancelledRef.current) {
         imagesRef.current[nextIndex] = img;
-        setLoadedCount((c) => c + 1);
+        totalLoadedRef.current++;
+        if (
+          totalLoadedRef.current % 5 === 0 ||
+          totalLoadedRef.current === TOTAL_HERO_FRAMES
+        ) {
+          setLoadedCount(totalLoadedRef.current);
+        }
         if (nextIndex === 0) {
           setFirstFrameLoaded(true);
         }

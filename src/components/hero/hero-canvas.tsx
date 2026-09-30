@@ -13,6 +13,7 @@ if (typeof window !== "undefined") {
 }
 
 export function HeroCanvas() {
+  const trackRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { firstFrameLoaded, getFrame, loadedCount } = useHeroFrames();
@@ -100,20 +101,18 @@ export function HeroCanvas() {
     return () => window.removeEventListener("resize", handleResize);
   }, [firstFrameLoaded, handleResize, renderFrame]);
 
-  // ScrollTrigger Setup
+  // ScrollTrigger Setup using pure native CSS sticky pinning — NO GSAP pin: true!
+  // This eliminates GSAP's pin-spacer DOM manipulation which causes React 19 insertBefore crashes.
   useEffect(() => {
     if (prefersReducedMotion || !firstFrameLoaded) return;
 
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
+    const track = trackRef.current;
+    if (!track) return;
 
     const trigger = ScrollTrigger.create({
-      trigger: container,
+      trigger: track,
       start: "top top",
-      end: () => `+=${window.innerHeight * 2.5}`, // Pinned scroll track length for deliberate cinematic control
-      pin: true,
-      pinSpacing: true,
+      end: "bottom bottom",
       scrub: 0.2, // Smooth interpolation for natural feel
       onUpdate: (self) => {
         const progress = self.progress;
@@ -140,48 +139,55 @@ export function HeroCanvas() {
 
   return (
     <div
-      id="hero"
-      ref={containerRef}
-      className="relative w-full h-screen overflow-hidden bg-[#120905]"
+      id="hero-track"
+      ref={trackRef}
+      className="relative w-full"
+      style={{ height: prefersReducedMotion ? "100vh" : "300vh" }}
     >
-      {/* Instant Poster Image: Preloaded in <head>, renders immediately on first HTML paint */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/asset/caramel-cold-brew/frame-0001.webp"
-        alt="AI Café Cold Brew Experience"
-        fetchPriority="high"
-        loading="eager"
-        decoding="sync"
-        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-0"
-        style={{
-          width: "100%",
-          height: "100%",
-        }}
-      />
+      <div
+        id="hero"
+        ref={containerRef}
+        className="sticky top-0 w-full h-screen overflow-hidden bg-[#120905]"
+      >
+        {/* Instant Poster Image: Preloaded in <head>, renders immediately on first HTML paint */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/asset/caramel-cold-brew/frame-0001.webp"
+          alt="AI Café Cold Brew Experience"
+          fetchPriority="high"
+          loading="eager"
+          decoding="sync"
+          className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-0"
+          style={{
+            width: "100%",
+            height: "100%",
+          }}
+        />
 
-      {/* HTML5 Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-10 transition-opacity duration-300"
-        style={{ width: "100%", height: "100%", opacity: firstFrameLoaded ? 1 : 0 }}
-      />
+        {/* HTML5 Canvas */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none z-10 transition-opacity duration-300"
+          style={{ width: "100%", height: "100%", opacity: firstFrameLoaded ? 1 : 0 }}
+        />
 
-      {/* Cinematic Vignette & Ambient Gradient Overlays */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#120905]/80 via-transparent to-[#120905]/40" />
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[#120905]/40 via-transparent to-[#120905]/40" />
+        {/* Cinematic Vignette & Ambient Gradient Overlays */}
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#120905]/80 via-transparent to-[#120905]/40" />
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-[#120905]/40 via-transparent to-[#120905]/40" />
 
-      {/* Hero Typography & CTA Overlay */}
-      <HeroOverlay
-        scrollProgress={scrollProgress}
-        isReducedMotion={prefersReducedMotion}
-      />
+        {/* Hero Typography & CTA Overlay */}
+        <HeroOverlay
+          scrollProgress={scrollProgress}
+          isReducedMotion={prefersReducedMotion}
+        />
 
-      {/* Subtle frame preloading indicator (discreet, bottom-right) */}
-      {loadedCount < TOTAL_HERO_FRAMES && (
-        <div className="absolute bottom-3 right-4 z-30 pointer-events-none text-[9px] text-cream/40 tracking-wider uppercase font-mono">
-          Buffering experience {Math.round((loadedCount / TOTAL_HERO_FRAMES) * 100)}%
-        </div>
-      )}
+        {/* Subtle frame preloading indicator (discreet, bottom-right) */}
+        {loadedCount < TOTAL_HERO_FRAMES && (
+          <div className="absolute bottom-3 right-4 z-30 pointer-events-none text-[9px] text-cream/40 tracking-wider uppercase font-mono">
+            Buffering experience {Math.round((loadedCount / TOTAL_HERO_FRAMES) * 100)}%
+          </div>
+        )}
+      </div>
     </div>
   );
 }
