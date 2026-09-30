@@ -41,3 +41,7 @@ assest/
 *.tsbuildinfo
 next-env.d.ts
 
+# Test outputs
+test-results/
+
+

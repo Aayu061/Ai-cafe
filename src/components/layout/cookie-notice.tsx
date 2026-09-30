@@ -29,13 +29,14 @@ export function CookieNotice() {
     setVisible(false);
   };
 
-  if (!visible) return null;
-
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 p-4 rounded-2xl bg-[#180C06]/95 backdrop-blur-md border border-[#C98A4A]/30 text-cream shadow-floating transition-all duration-300"
+      aria-hidden={!visible}
+      className={`fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 p-4 rounded-2xl bg-[#180C06]/95 backdrop-blur-md border border-[#C98A4A]/30 text-cream shadow-floating transition-all duration-300 ${
+        visible ? "block opacity-100" : "hidden pointer-events-none opacity-0"
+      }`}
     >
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-full bg-[#C98A4A]/20 text-[#C98A4A] flex items-center justify-center shrink-0 mt-0.5">

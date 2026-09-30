@@ -27,10 +27,15 @@ export async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
+  const method = (options.method || "GET").toUpperCase();
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+
+  // Only set Content-Type for requests with a payload (POST, PUT, PATCH)
+  if (method !== "GET" && method !== "HEAD" && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
 
   // Inject current Firebase ID Token if user is authenticated
   if (auth.currentUser) {
@@ -42,14 +47,16 @@ export async function apiFetch<T = unknown>(
     }
   }
 
-  // Inject guest session ID if present
+  // Inject guest session ID if present (only when mutating or specifically required by barista/orders)
   if (typeof window !== "undefined") {
     let guestSession = sessionStorage.getItem("ai_cafe_guest_session_id");
     if (!guestSession) {
       guestSession = `guest-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       sessionStorage.setItem("ai_cafe_guest_session_id", guestSession);
     }
-    headers["x-guest-session-id"] = guestSession;
+    if (method !== "GET" || endpoint.includes("barista") || endpoint.includes("order")) {
+      headers["x-guest-session-id"] = guestSession;
+    }
   }
 
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;

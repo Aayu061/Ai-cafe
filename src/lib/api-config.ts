@@ -26,10 +26,9 @@ if (!CONFIGURED_API_URL && typeof window === "undefined") {
  * All API calls must use this constant — never hardcode localhost anywhere.
  */
 export const API_BASE_URL: string =
-  CONFIGURED_API_URL ||
-  (typeof process !== "undefined" && process.env.NODE_ENV === "production"
-    ? "https://ai-cafe-1v5c.onrender.com"
-    : "http://localhost:5001");
+  CONFIGURED_API_URL && CONFIGURED_API_URL.trim() !== ""
+    ? CONFIGURED_API_URL.replace(/\/+$/, "")
+    : "";
 
 /**
  * Helper to build a full API endpoint URL.

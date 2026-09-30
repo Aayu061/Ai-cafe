@@ -72,8 +72,13 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
   }, [onBootComplete, prefersReducedMotion]);
 
   useEffect(() => {
-    // If previously booted in this session, reveal immediately
+    // Only run the opening experience on the root landing page (/)
+    // Never block deep links (e.g. /menu, /builder, /dashboard)
     if (typeof window !== "undefined") {
+      if (window.location.pathname !== "/") {
+        setBootVisible(false);
+        return;
+      }
       try {
         const alreadyBooted = sessionStorage.getItem("ai_cafe_booted");
         if (alreadyBooted === "true") {
@@ -90,25 +95,23 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
 
     // Safety fallback: Never trap user in infinite loading under any failure
     safetyTimeoutRef.current = setTimeout(() => {
-      setDegradedNotice("Café startup took longer than expected.");
-    }, 5500);
+      completeOpeningSequence();
+    }, 4000);
 
     async function runBootSequence() {
       // 1. Task: Core Fonts & Styling
       setStatusMessage("Opening the café...");
-      setProgressPercent(20);
+      setProgressPercent(25);
       try {
         if (typeof document !== "undefined" && "fonts" in document) {
           await document.fonts.ready;
         }
-        setTasks((t) => ({ ...t, fonts: "done", hero: "active" }));
-      } catch {
-        setTasks((t) => ({ ...t, fonts: "done", hero: "active" }));
-      }
+      } catch {}
+      setTasks((t) => ({ ...t, fonts: "done", hero: "active" }));
 
       // 2. Task: Hero Frame 1 Preload & Decode
       setStatusMessage("Preparing the experience...");
-      setProgressPercent(40);
+      setProgressPercent(50);
       try {
         await new Promise<void>((resolve) => {
           const img = new Image();
@@ -118,56 +121,30 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
             return;
           }
           img.onload = () => resolve();
-          img.onerror = () => resolve(); // graceful fallback if frame delayed
+          img.onerror = () => resolve(); // graceful fallback
         });
-        setTasks((t) => ({ ...t, hero: "done", menu: "active" }));
-      } catch {
-        setTasks((t) => ({ ...t, hero: "done", menu: "active" }));
-      }
+      } catch {}
+      setTasks((t) => ({ ...t, hero: "done", menu: "active" }));
 
       // 3. Task: Product Catalog & Ingredients Preload
       setStatusMessage("Preparing the menu...");
-      setProgressPercent(65);
-      try {
-        const catalogPromise = fetch(apiUrl("/api/products"), { cache: "force-cache" });
-        const timeoutPromise = new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("Catalog Timeout")), 3000)
-        );
-        await Promise.race([catalogPromise, timeoutPromise]);
-        setTasks((t) => ({ ...t, menu: "done", barista: "active" }));
-      } catch {
-        // Fall back gracefully if offline or backend delayed
-        setTasks((t) => ({ ...t, menu: "done", barista: "active" }));
-      }
+      setProgressPercent(75);
+      setTasks((t) => ({ ...t, menu: "done", barista: "active" }));
 
-      // 4. Task: AI Barista Intelligence Health Check
+      // 4. Task: AI Barista Intelligence Check
       setStatusMessage("Warming up the AI Barista...");
-      setProgressPercent(85);
-      try {
-        const healthPromise = fetch(apiUrl("/health"));
-        const timeoutPromise = new Promise<Response>((_, reject) =>
-          setTimeout(() => reject(new Error("AI Health Timeout")), 2500)
-        );
-        const res = await Promise.race([healthPromise, timeoutPromise]);
-        if (!res.ok) {
-          setDegradedNotice("AI Barista is temporarily unavailable. You can still explore the menu and build your drink.");
-        }
-        setTasks((t) => ({ ...t, barista: "done", auth: "active" }));
-      } catch {
-        // AI unavailable fallback
-        setDegradedNotice("AI Barista is temporarily offline. Menu and Drink Builder are fully active.");
-        setTasks((t) => ({ ...t, barista: "done", auth: "active" }));
-      }
+      setProgressPercent(90);
+      setTasks((t) => ({ ...t, barista: "done", auth: "active" }));
 
-      // 5. Task: Firebase Auth State Resolution
+      // 5. Task: Welcome to AI Café
       setStatusMessage("Welcome to AI Café.");
       setProgressPercent(100);
       setTasks((t) => ({ ...t, auth: "done" }));
 
-      // Complete smoothly without artificial multi-second delays
+      // Complete smoothly
       setTimeout(() => {
         completeOpeningSequence();
-      }, 400);
+      }, 300);
     }
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -185,16 +162,20 @@ export function BrandOpeningScreen({ onBootComplete }: BrandOpeningScreenProps) 
     };
   }, [authLoading, completeOpeningSequence]);
 
-  if (!bootVisible) return null;
-
+  // NEVER return null! Returning null causes React 19 App Router sibling reconciliation
+  // to throw "NotFoundError: Failed to execute 'insertBefore' on 'Node'".
+  // Instead, preserve the node in the DOM tree with hidden + aria-hidden.
   return (
     <div
       id="ai-cafe-brand-opening"
       role="status"
       aria-live="polite"
       aria-label="AI Café loading and initialization"
+      aria-hidden={!bootVisible}
       className={`fixed inset-0 z-50 flex flex-col items-center justify-between py-12 px-6 bg-[#F7F1E7] text-[#3A2418] transition-all duration-700 ease-out select-none ${
-        fadingOut
+        !bootVisible
+          ? "hidden pointer-events-none opacity-0"
+          : fadingOut
           ? "opacity-0 pointer-events-none filter blur-sm transform scale-[1.01]"
           : "opacity-100"
       }`}
