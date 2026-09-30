@@ -9,6 +9,15 @@ import {
   WebhookVerificationResult,
 } from "../../types/payment";
 
+export class PaymentGatewayError extends Error {
+  public readonly statusCode = 502;
+  public readonly code = "PAYMENT_GATEWAY_ERROR";
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentGatewayError";
+  }
+}
+
 export interface CashfreeConfig {
   appId?: string;
   secretKey?: string;
@@ -37,7 +46,7 @@ export class CashfreeProvider implements IPaymentProvider {
     const secretKey = this.config?.secretKey !== undefined ? this.config.secretKey : env.CASHFREE_SECRET_KEY;
 
     if (!appId || !secretKey) {
-      throw new Error(
+      throw new PaymentGatewayError(
         "Cashfree credentials not configured. Please set CASHFREE_APP_ID and CASHFREE_SECRET_KEY in backend environment."
       );
     }
@@ -80,27 +89,58 @@ export class CashfreeProvider implements IPaymentProvider {
       order_note: (params.orderNote || "AI Café Artisan Beverage Order").slice(0, 200),
     };
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+    console.log(
+      `[CashfreeProvider]: Initiating order ${params.orderId} (amount: ₹${params.amount}, env: ${env.CASHFREE_ENVIRONMENT})`
+    );
 
-    const data = (await response.json()) as Record<string, unknown>;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    let response: Response;
+    let data: Record<string, unknown>;
+
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      data = (await response.json()) as Record<string, unknown>;
+    } catch (err: unknown) {
+      if ((err as Error).name === "AbortError") {
+        console.error(`[CashfreeProvider]: Gateway request timed out after 12s for order ${params.orderId}`);
+        throw new PaymentGatewayError(`Cashfree payment gateway request timed out after 12s. Please retry.`);
+      }
+      console.error(
+        `[CashfreeProvider]: Network error reaching Cashfree gateway for order ${params.orderId}:`,
+        (err as Error).message
+      );
+      throw new PaymentGatewayError(`Failed to communicate with Cashfree gateway: ${(err as Error).message}`);
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    console.log(
+      `[CashfreeProvider]: Order ${params.orderId} gateway response: HTTP ${response.status} (hasSessionId: ${Boolean(
+        data.payment_session_id
+      )})`
+    );
 
     if (!response.ok) {
       const errorMsg =
         (data.message as string) ||
         (data.error as string) ||
         `Cashfree Order API returned status ${response.status}`;
-      throw new Error(`[CashfreeProvider]: Failed to create payment order: ${errorMsg}`);
+      console.error(`[CashfreeProvider]: Failed to create payment order for ${params.orderId}:`, errorMsg);
+      throw new PaymentGatewayError(`[Cashfree]: ${errorMsg}`);
     }
 
     const paymentSessionId = data.payment_session_id as string;
     const cfOrderId = String(data.cf_order_id || data.order_id || params.orderId);
 
     if (!paymentSessionId) {
-      throw new Error("[CashfreeProvider]: Response did not contain payment_session_id");
+      throw new PaymentGatewayError("[CashfreeProvider]: Gateway response did not contain payment_session_id");
     }
 
     return {
@@ -121,10 +161,27 @@ export class CashfreeProvider implements IPaymentProvider {
     const url = `${this.getBaseUrl()}/orders/${orderId}/payments`;
     const headers = this.getHeaders();
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers,
-    });
+    console.log(`[CashfreeProvider]: Querying payment status for order ${orderId}`);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+    } catch (err: unknown) {
+      if ((err as Error).name === "AbortError") {
+        console.error(`[CashfreeProvider]: Status lookup timed out after 12s for order ${orderId}`);
+        throw new PaymentGatewayError(`Cashfree payment verification timed out after 12s.`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -137,7 +194,7 @@ export class CashfreeProvider implements IPaymentProvider {
           rawStatus: "NOT_FOUND",
         };
       }
-      throw new Error(`[CashfreeProvider]: Failed to get payment status (HTTP ${response.status})`);
+      throw new PaymentGatewayError(`[CashfreeProvider]: Failed to get payment status (HTTP ${response.status})`);
     }
 
     const payments = (await response.json()) as Array<Record<string, unknown>>;

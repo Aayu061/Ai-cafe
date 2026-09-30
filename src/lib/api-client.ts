@@ -23,9 +23,13 @@ export interface ApiResponse<T = unknown> {
   };
 }
 
+export interface ApiFetchOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
 export async function apiFetch<T = unknown>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<ApiResponse<T>> {
   const method = (options.method || "GET").toUpperCase();
   const headers: Record<string, string> = {
@@ -62,15 +66,63 @@ export async function apiFetch<T = unknown>(
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const targetUrl = `${BACKEND_URL}${cleanEndpoint}`;
 
+  // Configure non-blocking abort timeout
+  const timeoutMs = options.timeoutMs ?? 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => controller.abort());
+  }
+
   try {
     const res = await fetch(targetUrl, {
       ...options,
       headers,
+      signal: controller.signal,
     });
 
-    const body = (await res.json()) as ApiResponse<T>;
-    return body;
+    clearTimeout(timer);
+
+    const text = await res.text();
+    let body: any;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      return {
+        success: false,
+        error: {
+          code: res.status >= 500 ? "SERVER_ERROR" : "INVALID_RESPONSE",
+          message:
+            res.status === 502 || res.status === 504
+              ? "The backend is temporarily waking up from sleep mode (HTTP 504 Gateway Timeout). Please retry in a moment."
+              : `Server returned non-JSON response (HTTP ${res.status}).`,
+        },
+      };
+    }
+
+    if (!res.ok && !body.error) {
+      body.success = false;
+      body.error = {
+        code: `HTTP_${res.status}`,
+        message: body.message || `Backend service returned status ${res.status}.`,
+      };
+    }
+
+    return body as ApiResponse<T>;
   } catch (err: unknown) {
+    clearTimeout(timer);
+
+    if ((err as Error).name === "AbortError") {
+      return {
+        success: false,
+        error: {
+          code: "TIMEOUT",
+          message: `Request to backend timed out after ${Math.round(timeoutMs / 1000)}s. Please try again.`,
+        },
+      };
+    }
+
     return {
       success: false,
       error: {
@@ -106,6 +158,7 @@ export async function recommendDrink(
   const response = await apiFetch<BaristaRecommendResponse>("/api/barista/recommend", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: 20000,
   });
 
   return response as unknown as BaristaRecommendResponse;
@@ -113,25 +166,28 @@ export async function recommendDrink(
 
 /**
  * Customer Commerce API Helpers
+ * Uses short non-blocking timeouts for secondary data to never freeze navigation.
  */
 export async function fetchFavorites() {
-  return apiFetch<{ favorites: any[] }>("/api/favorites");
+  return apiFetch<{ favorites: any[] }>("/api/favorites", { timeoutMs: 6000 });
 }
 
 export async function addFavoriteApi(productId: string) {
   return apiFetch<{ favorites: string[] }>(`/api/favorites/${productId}`, {
     method: "POST",
+    timeoutMs: 8000,
   });
 }
 
 export async function removeFavoriteApi(productId: string) {
   return apiFetch<{ favorites: string[] }>(`/api/favorites/${productId}`, {
     method: "DELETE",
+    timeoutMs: 8000,
   });
 }
 
 export async function fetchSavedDrinks() {
-  return apiFetch<{ savedDrinks: any[] }>("/api/saved-drinks");
+  return apiFetch<{ savedDrinks: any[] }>("/api/saved-drinks", { timeoutMs: 6000 });
 }
 
 export async function saveDrinkApi(payload: {
@@ -142,20 +198,23 @@ export async function saveDrinkApi(payload: {
   return apiFetch<{ savedDrink: any }>("/api/saved-drinks", {
     method: "POST",
     body: JSON.stringify(payload),
+    timeoutMs: 10000,
   });
 }
 
 export async function deleteSavedDrinkApi(id: string) {
   return apiFetch<{ success: boolean }>(`/api/saved-drinks/${id}`, {
     method: "DELETE",
+    timeoutMs: 8000,
   });
 }
 
 export async function fetchCustomerOrders() {
-  return apiFetch<{ orders: any[] }>("/api/orders");
+  return apiFetch<{ orders: any[] }>("/api/orders", { timeoutMs: 6000 });
 }
 
 export async function fetchOrderById(orderId: string) {
-  return apiFetch<{ order: any }>(`/api/orders/${orderId}`);
+  return apiFetch<{ order: any }>(`/api/orders/${orderId}`, { timeoutMs: 8000 });
 }
+
 

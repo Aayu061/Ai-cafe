@@ -25,7 +25,21 @@ import {
   Sparkles,
   Store,
   Car,
+  RotateCcw,
 } from "lucide-react";
+
+export type CheckoutState =
+  | "idle"
+  | "creating_order"
+  | "creating_payment_session"
+  | "loading_cashfree"
+  | "opening_cashfree"
+  | "payment_ready"
+  | "order_failed"
+  | "payment_session_failed"
+  | "cashfree_load_failed"
+  | "cashfree_open_failed"
+  | "timeout";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -37,9 +51,44 @@ export default function CheckoutPage() {
   const [notes, setNotes] = useState("");
   const [phone, setPhone] = useState("9999999999");
 
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  // Deterministic Checkout State Machine
+  const [checkoutState, setCheckoutState] = useState<CheckoutState>("idle");
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
+
+  const isProcessing = [
+    "creating_order",
+    "creating_payment_session",
+    "loading_cashfree",
+    "opening_cashfree",
+    "payment_ready",
+  ].includes(checkoutState);
+
+  const isFailure = [
+    "order_failed",
+    "payment_session_failed",
+    "cashfree_load_failed",
+    "cashfree_open_failed",
+    "timeout",
+  ].includes(checkoutState);
+
+  const getStatusText = (): string => {
+    switch (checkoutState) {
+      case "creating_order":
+        return "1/4 Creating your artisan order...";
+      case "creating_payment_session":
+        return "2/4 Initializing Cashfree Sandbox session...";
+      case "loading_cashfree":
+        return "3/4 Loading Cashfree secure gateway...";
+      case "opening_cashfree":
+        return "4/4 Opening payment modal...";
+      case "payment_ready":
+        return "Cashfree Sandbox window open. Complete test payment above.";
+      default:
+        return "Processing payment...";
+    }
+  };
 
   const handleInitiatePayment = async () => {
     if (!user) {
@@ -49,73 +98,127 @@ export default function CheckoutPage() {
 
     if (items.length === 0) {
       setErrorMessage("Your cart is empty. Please add drinks before checkout.");
+      setCheckoutState("idle");
       return;
     }
 
-    setIsProcessing(true);
     setErrorMessage(null);
-    setStatusMessage("Preparing your payment...");
+    setErrorDetails(null);
+
+    let currentOrderId = activeOrderId;
 
     try {
-      // 1. Create Server-Authoritative AI Café Order
-      const combinedNotes = [
-        tableOrVehicle ? `Location/Table: ${tableOrVehicle}` : "",
-        notes ? `Notes: ${notes}` : "",
-      ]
-        .filter(Boolean)
-        .join(" | ");
+      // -------------------------------------------------------------
+      // Step 1: Create Server-Authoritative AI Café Order (or reuse if retrying)
+      // -------------------------------------------------------------
+      if (!currentOrderId) {
+        setCheckoutState("creating_order");
 
-      const orderPayload = {
-        items: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          configuration: item.configuration,
-          configurationSummary: item.configurationSummary,
-        })),
-        customerName: userProfile?.displayName || user.displayName || "AI Café Patron",
-        customerEmail: user.email || "patron@aicafe.internal",
-        customerPhone: phone || "9999999999",
-        fulfillmentType,
-        notes: combinedNotes || undefined,
-      };
+        const combinedNotes = [
+          tableOrVehicle ? `Location/Table: ${tableOrVehicle}` : "",
+          notes ? `Notes: ${notes}` : "",
+        ]
+          .filter(Boolean)
+          .join(" | ");
 
-      const orderRes = (await apiFetch<{ order: { id: string } }>("/api/orders", {
-        method: "POST",
-        body: JSON.stringify(orderPayload),
-      })) as any;
+        const orderPayload = {
+          items: items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            configuration: item.configuration,
+            configurationSummary: item.configurationSummary,
+          })),
+          customerName: userProfile?.displayName || user.displayName || "AI Café Patron",
+          customerEmail: user.email || "patron@aicafe.internal",
+          customerPhone: phone || "9999999999",
+          fulfillmentType,
+          notes: combinedNotes || undefined,
+        };
 
-      if (!orderRes.success || !orderRes.order?.id) {
-        throw new Error(orderRes.error?.message || "Failed to create order on server.");
+        const orderRes = (await apiFetch<{ order: { id: string } }>("/api/orders", {
+          method: "POST",
+          body: JSON.stringify(orderPayload),
+          timeoutMs: 15000,
+        })) as any;
+
+        if (!orderRes.success || !orderRes.order?.id) {
+          const isTimeout = orderRes.error?.code === "TIMEOUT";
+          setCheckoutState(isTimeout ? "timeout" : "order_failed");
+          setErrorMessage(
+            orderRes.error?.message ||
+              "Could not create order on the server. The café engine may be waking up."
+          );
+          setErrorDetails(orderRes.error?.code || "ORDER_CREATION_FAILED");
+          return;
+        }
+
+        currentOrderId = orderRes.order.id;
+        setActiveOrderId(currentOrderId);
       }
 
-      const orderId = orderRes.order.id;
+      // -------------------------------------------------------------
+      // Step 2: Request Cashfree Payment Session from Backend
+      // -------------------------------------------------------------
+      setCheckoutState("creating_payment_session");
 
-      // 2. Request Cashfree Payment Session from Backend
-      setStatusMessage("Opening secure checkout...");
-
-      const returnUrl = `${window.location.origin}/checkout/payment-result?order_id=${orderId}`;
+      const returnUrl = `${window.location.origin}/checkout/payment-result?order_id=${currentOrderId}`;
 
       const sessionRes = (await apiFetch<{
         paymentSessionId: string;
         providerOrderId: string;
-      }>(`/api/orders/${orderId}/payment`, {
+      }>(`/api/orders/${currentOrderId}/payment`, {
         method: "POST",
         body: JSON.stringify({ returnUrl }),
+        timeoutMs: 15000,
       })) as any;
 
       if (!sessionRes.success || !sessionRes.paymentSessionId) {
-        throw new Error(sessionRes.error?.message || "Failed to obtain payment session.");
+        const isTimeout = sessionRes.error?.code === "TIMEOUT";
+        setCheckoutState(isTimeout ? "timeout" : "payment_session_failed");
+        setErrorMessage(
+          sessionRes.error?.message ||
+            "Payment session could not be established with Cashfree. Please retry."
+        );
+        setErrorDetails(sessionRes.error?.code || "PAYMENT_SESSION_FAILED");
+        return;
       }
 
-      // 3. Launch Cashfree Web Checkout in Sandbox Mode
-      await launchCashfreeCheckout(sessionRes.paymentSessionId);
+      const paymentSessionId = sessionRes.paymentSessionId;
+
+      // -------------------------------------------------------------
+      // Step 3: Load Cashfree Web SDK
+      // -------------------------------------------------------------
+      setCheckoutState("loading_cashfree");
+      try {
+        await launchCashfreeCheckout(paymentSessionId, { redirectTarget: "_modal" });
+        setCheckoutState("payment_ready");
+      } catch (sdkErr: unknown) {
+        console.error("[Checkout]: Cashfree SDK invocation failed:", sdkErr);
+        const errStr = (sdkErr as Error).message || "";
+        if (errStr.includes("timed out") || errStr.includes("Network error")) {
+          setCheckoutState("cashfree_load_failed");
+          setErrorMessage("Payment service could not be loaded from CDN. Please check your internet connection.");
+        } else {
+          setCheckoutState("cashfree_open_failed");
+          setErrorMessage(errStr || "Payment window could not be opened. Please retry.");
+        }
+        setErrorDetails(errStr);
+      }
     } catch (err: unknown) {
-      console.error("[Checkout]: Payment flow failed:", err);
+      console.error("[Checkout]: Unexpected payment error:", err);
+      setCheckoutState("order_failed");
       setErrorMessage((err as Error).message || "An unexpected error occurred during checkout.");
-      setIsProcessing(false);
-      setStatusMessage(null);
+      setErrorDetails((err as Error).name);
     }
   };
+
+  const handleResetOrder = () => {
+    setActiveOrderId(null);
+    setCheckoutState("idle");
+    setErrorMessage(null);
+    setErrorDetails(null);
+  };
+
 
   return (
     <div className="min-h-screen flex flex-col bg-cream font-sans">
@@ -351,19 +454,62 @@ export default function CheckoutPage() {
                   </p>
                 </div>
 
-                {/* Error Banner */}
-                {errorMessage && (
-                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>{errorMessage}</span>
+                {/* Error Banner with Recoverable Retry State */}
+                {isFailure && (
+                  <div className="p-4 rounded-xl bg-red-50/90 border border-red-200 text-xs text-red-800 space-y-2.5">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-bold text-red-900">
+                          {checkoutState === "timeout"
+                            ? "Payment Initialization Timed Out"
+                            : checkoutState === "cashfree_load_failed"
+                            ? "Payment Service Load Failure"
+                            : "Payment Could Not Be Initialized"}
+                        </p>
+                        <p className="mt-0.5 text-red-700 leading-relaxed">
+                          {errorMessage || "The payment session could not be completed. Please try again."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {activeOrderId && (
+                      <div className="flex items-center justify-between text-[11px] bg-red-100/60 p-2 rounded-lg border border-red-200/50">
+                        <span className="text-red-700">Order ID: <code className="font-mono font-bold text-red-900">{activeOrderId}</code></span>
+                        <span className="text-forest font-semibold">Preserved for retry</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={handleInitiatePayment}
+                        className="gap-1.5 py-1.5 text-xs bg-red-700 hover:bg-red-800 text-white shadow-none"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Retry Payment</span>
+                      </Button>
+                      <Link href="/cart">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="py-1.5 text-xs border-espresso/20 text-espresso hover:bg-cream"
+                        >
+                          Review Tray
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 )}
 
-                {/* Status Indicator */}
-                {statusMessage && (
-                  <div className="p-3 rounded-xl bg-caramel/15 border border-caramel/30 text-xs text-espresso font-medium flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-caramel" />
-                    <span>{statusMessage}</span>
+                {/* Progress / Status Indicator */}
+                {isProcessing && (
+                  <div className="p-3.5 rounded-xl bg-caramel/15 border border-caramel/30 text-xs text-espresso font-medium flex items-center justify-center gap-2.5">
+                    <Loader2 className="w-4 h-4 animate-spin text-caramel flex-shrink-0" />
+                    <span>{getStatusText()}</span>
                   </div>
                 )}
 
@@ -378,7 +524,12 @@ export default function CheckoutPage() {
                   {isProcessing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>{statusMessage || "Processing..."}</span>
+                      <span>{getStatusText()}</span>
+                    </>
+                  ) : isFailure ? (
+                    <>
+                      <RotateCcw className="w-4 h-4 text-caramel" />
+                      <span>Retry Payment ({formatPrice(cartSubtotal)})</span>
                     </>
                   ) : (
                     <>

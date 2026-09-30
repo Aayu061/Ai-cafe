@@ -9,7 +9,7 @@ import { accountResolutionService } from "./services/account-resolution.service"
 import { sanitizeHtml, sanitizePayload } from "./utils/sanitize";
 import { orderService } from "./services/operations/order.service";
 import { paymentService } from "./services/payment/payment.service";
-import { cashfreeProvider, CashfreeProvider } from "./services/payment/cashfree.provider";
+import { cashfreeProvider, CashfreeProvider, PaymentGatewayError } from "./services/payment/cashfree.provider";
 import { inventoryService } from "./services/operations/inventory.service";
 import { env } from "./config/env";
 import { IPaymentProvider } from "./types/payment";
@@ -2678,6 +2678,244 @@ async function runTests() {
     const body = (await res.json()) as any;
     const ok = res.status === 201 && body.order?.total === 290;
     return { ok, details: `Status: ${res.status}, Combo Total: ₹${body.order?.total}` };
+  });
+
+  // 185. Cashfree Provider: Missing credentials throws PaymentGatewayError
+  await check("185. Cashfree Gateway: Missing credentials throws PaymentGatewayError with HTTP 502 code", async () => {
+    const unconfiguredProvider = new CashfreeProvider({ appId: "", secretKey: "" });
+    try {
+      await unconfiguredProvider.createPaymentOrder({
+        orderId: "AC-TEST-NOCRED",
+        amount: 100,
+        currency: "INR",
+        customer: { id: "test", name: "Test", email: "test@aicafe.internal", phone: "9999999999" },
+        returnUrl: "http://localhost:3000/checkout/payment-result",
+      });
+      return { ok: false, details: "Expected error was not thrown" };
+    } catch (err: unknown) {
+      const isGatewayErr = err instanceof PaymentGatewayError && (err as PaymentGatewayError).statusCode === 502;
+      return { ok: isGatewayErr, details: `Error: ${(err as Error).message}, StatusCode: ${(err as any).statusCode}` };
+    }
+  });
+
+  // 186. Cashfree Provider: API rejection simulation throws PaymentGatewayError
+  await check("186. Cashfree Gateway: Invalid gateway response throws PaymentGatewayError with 502", async () => {
+    const badProvider = new CashfreeProvider({
+      appId: "test_app",
+      secretKey: "test_secret",
+      apiVersion: "2025-01-01",
+      environment: "sandbox",
+    });
+    // Attempting live sandbox call with dummy credentials should be rejected by Cashfree with HTTP 401/400
+    try {
+      await badProvider.createPaymentOrder({
+        orderId: "AC-TEST-BADAUTH",
+        amount: 100,
+        currency: "INR",
+        customer: { id: "test", name: "Test", email: "test@aicafe.internal", phone: "9999999999" },
+        returnUrl: "http://localhost:3000/checkout/payment-result",
+      });
+      return { ok: false, details: "Expected rejection did not occur" };
+    } catch (err: unknown) {
+      const isGatewayErr = err instanceof PaymentGatewayError;
+      return { ok: isGatewayErr, details: `Caught PaymentGatewayError: ${(err as Error).message.slice(0, 75)}...` };
+    }
+  });
+
+  // 187. Security: Customer B cannot create a payment session for Customer A's order
+  await check("187. Security: Customer B cannot create payment session for Customer A's order (403 Forbidden)", async () => {
+    // 1. Customer A creates order
+    const orderA = await orderService.createOrder({
+      userId: "usr-customer-alpha",
+      customerName: "Alpha Customer",
+      customerEmail: "alpha@aicafe.internal",
+      items: [{ productId: "caramel-cold-brew", quantity: 1 }],
+    });
+
+    // 2. Customer B attempts to initiate payment session on Customer A's order
+    const res = await fetch(`${baseUrl}/api/orders/${orderA.id}/payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-token-customer",
+        "x-test-role": "customer",
+        "x-test-uid": "usr-customer-beta", // Different customer!
+        "x-test-ip": "10.99.1.54",
+      },
+      body: JSON.stringify({
+        returnUrl: `http://localhost:3000/checkout/payment-result?order_id=${orderA.id}`,
+      }),
+    });
+    const body = (await res.json()) as any;
+    const ok = res.status === 403 && body.error?.code === "FORBIDDEN";
+    return { ok, details: `Status: ${res.status}, Code: ${body.error?.code}` };
+  });
+
+  // 188. Idempotency: Multiple payment session requests on the same pending order reuse the order
+  await check("188. Idempotency: Multiple payment requests on same PENDING_PAYMENT order reuse order without duplicating", async () => {
+    const order = await orderService.createOrder({
+      userId: "usr-idempotent-patron",
+      customerName: "Idempotent Patron",
+      customerEmail: "idempotent@aicafe.internal",
+      items: [{ productId: "espresso", quantity: 1 }],
+    });
+
+    const res1 = await fetch(`${baseUrl}/api/orders/${order.id}/payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-token-customer",
+        "x-test-role": "customer",
+        "x-test-uid": "usr-idempotent-patron",
+        "x-test-ip": "10.99.1.55",
+      },
+      body: JSON.stringify({
+        returnUrl: `http://localhost:3000/checkout/payment-result?order_id=${order.id}`,
+      }),
+    });
+    const body1 = (await res1.json()) as any;
+
+    const res2 = await fetch(`${baseUrl}/api/orders/${order.id}/payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer test-token-customer",
+        "x-test-role": "customer",
+        "x-test-uid": "usr-idempotent-patron",
+        "x-test-ip": "10.99.1.55",
+      },
+      body: JSON.stringify({
+        returnUrl: `http://localhost:3000/checkout/payment-result?order_id=${order.id}`,
+      }),
+    });
+    const body2 = (await res2.json()) as any;
+
+    const ok =
+      res1.status === 200 &&
+      res2.status === 200 &&
+      body1.orderId === order.id &&
+      body2.orderId === order.id;
+    return { ok, details: `Call 1 Status: ${res1.status}, Call 2 Status: ${res2.status}, OrderId preserved: ${ok}` };
+  });
+
+  // 189. State Machine: Order starts in PENDING_PAYMENT and transitions to paid upon verified payment
+  await check("189. State Machine: Order starts in PENDING_PAYMENT and transitions to paid upon verified payment", async () => {
+    const freshOrder = await orderService.createOrder({
+      userId: "usr-state-patron-fresh",
+      customerName: "Fresh State Patron",
+      customerEmail: "freshstate@aicafe.internal",
+      items: [{ productId: "cappuccino", quantity: 1 }],
+    });
+    const wasPending = freshOrder.status === "PENDING_PAYMENT" && freshOrder.paymentStatus === "unpaid";
+
+    // Simulate verified confirmation
+    await paymentService.confirmOrderPayment(freshOrder, {
+      orderId: freshOrder.id,
+      providerOrderId: `cf_${freshOrder.id}`,
+      amount: freshOrder.total,
+      currency: "INR",
+      status: "SUCCESS",
+      rawStatus: "SUCCESS",
+      paymentId: "pay_verified_189",
+    });
+
+    const updated = await orderService.getOrderById(freshOrder.id);
+    const isPaid = updated?.paymentStatus === "paid" && updated?.status === "preparing";
+
+    const ok = wasPending && isPaid;
+    return { ok, details: `Initial: ${freshOrder.status}/${freshOrder.paymentStatus}, Final: ${updated?.status}/${updated?.paymentStatus}` };
+  });
+
+  // 190. Cashfree Checkout SDK: Script URL points to official Cashfree CDN
+  await check("190. Cashfree SDK: Script URL points to official Cashfree CDN (sdk.cashfree.com)", async () => {
+    const checkoutTsPath = path.resolve(__dirname, "../../src/features/payments/cashfree-checkout.ts");
+    const content = fs.readFileSync(checkoutTsPath, "utf-8");
+    const hasCdn = content.includes("https://sdk.cashfree.com/js/v3/cashfree.js");
+    const hasModal = content.includes("redirectTarget: target") || content.includes("_modal");
+    const ok = hasCdn && hasModal;
+    return { ok, details: `Official CDN present: ${hasCdn}, Modal support: ${hasModal}` };
+  });
+
+  // 191. Webhook Idempotency: Re-submitting the exact same webhook payload is rejected with alreadyProcessed: true
+  await check("191. Webhook Idempotency: Re-submitting duplicate webhook is acknowledged with alreadyProcessed: true", async () => {
+    const order = await orderService.createOrder({
+      userId: "usr-dup-webhook-patron",
+      customerName: "Webhook Patron",
+      customerEmail: "webhook@aicafe.internal",
+      items: [{ productId: "cappuccino", quantity: 1 }],
+    });
+
+    const payload = JSON.stringify({
+      type: "PAYMENT_SUCCESS_WEBHOOK",
+      data: {
+        order: { order_id: order.id, order_amount: order.total },
+        payment: { cf_payment_id: `pay_dup_${Date.now()}`, payment_amount: order.total, payment_currency: "INR" },
+      },
+    });
+
+    const ts = String(Date.now());
+    const sig = crypto
+      .createHmac("sha256", env.CASHFREE_SECRET_KEY || "test_secret")
+      .update(ts + payload)
+      .digest("base64");
+
+    const res1 = await paymentService.processWebhook(payload, {
+      "x-webhook-timestamp": ts,
+      "x-webhook-signature": sig,
+    });
+
+    const res2 = await paymentService.processWebhook(payload, {
+      "x-webhook-timestamp": ts,
+      "x-webhook-signature": sig,
+    });
+
+    const ok = res1.success === true && res2.alreadyProcessed === true;
+    return { ok, details: `First call: success=${res1.success}, Second call: alreadyProcessed=${res2.alreadyProcessed}` };
+  });
+
+  // 192. Safe Inventory Deduction: Occurs exactly once and unit conversions are correct
+  await check("192. Inventory Safety: Ingredient deduction occurs exactly once per confirmed order", async () => {
+    const order = await orderService.createOrder({
+      userId: "usr-inv-patron-192",
+      customerName: "Inventory Patron 192",
+      customerEmail: "inventory192@aicafe.internal",
+      items: [{ productId: "caramel-cold-brew", quantity: 1 }],
+    });
+
+    const inv = await inventoryService.getInventory();
+    const item = inv.find((i) => i.ingredientId === "cold-brew");
+    const stockBefore = item?.quantity || 10;
+
+    // First confirmation
+    await paymentService.confirmOrderPayment(order, {
+      orderId: order.id,
+      providerOrderId: `cf_${order.id}`,
+      amount: order.total,
+      currency: "INR",
+      status: "SUCCESS",
+      rawStatus: "SUCCESS",
+      paymentId: `pay_inv_${Date.now()}`,
+    });
+
+    const invAfterFirst = await inventoryService.getInventory();
+    const stockAfterFirst = invAfterFirst.find((i) => i.ingredientId === "cold-brew")?.quantity || 0;
+
+    // Second confirmation on same order (idempotency check)
+    await paymentService.confirmOrderPayment(order, {
+      orderId: order.id,
+      providerOrderId: `cf_${order.id}`,
+      amount: order.total,
+      currency: "INR",
+      status: "SUCCESS",
+      rawStatus: "SUCCESS",
+      paymentId: `pay_inv_${Date.now()}_second`,
+    });
+
+    const invAfterSecond = await inventoryService.getInventory();
+    const stockAfterSecond = invAfterSecond.find((i) => i.ingredientId === "cold-brew")?.quantity || 0;
+
+    const deductedOnce = stockBefore !== stockAfterFirst && stockAfterFirst === stockAfterSecond;
+    return { ok: deductedOnce, details: `Before: ${stockBefore}, After 1st: ${stockAfterFirst}, After 2nd: ${stockAfterSecond} (Idempotent: ${stockAfterFirst === stockAfterSecond})` };
   });
 
   console.log(`\n📊 Verification Summary: ${passed} Passed, ${failed} Failed\n`);

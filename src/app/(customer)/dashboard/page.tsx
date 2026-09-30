@@ -64,21 +64,21 @@ function CustomerDashboardContent() {
         return;
       }
       try {
-        const [ordersRes, favsRes, savedRes] = await Promise.all([
+        const [ordersResult, favsResult, savedResult] = await Promise.allSettled([
           fetchCustomerOrders(),
           fetchFavorites(),
           fetchSavedDrinks(),
         ]);
 
         if (isMounted) {
-          if (ordersRes.success && (ordersRes as any).orders) {
-            setOrders((ordersRes as any).orders);
+          if (ordersResult.status === "fulfilled" && ordersResult.value.success && (ordersResult.value as any).orders) {
+            setOrders((ordersResult.value as any).orders);
           }
-          if (favsRes.success && (favsRes as any).favorites) {
-            setFavorites((favsRes as any).favorites);
+          if (favsResult.status === "fulfilled" && favsResult.value.success && (favsResult.value as any).favorites) {
+            setFavorites((favsResult.value as any).favorites);
           }
-          if (savedRes.success && (savedRes as any).savedDrinks) {
-            setSavedDrinks((savedRes as any).savedDrinks);
+          if (savedResult.status === "fulfilled" && savedResult.value.success && (savedResult.value as any).savedDrinks) {
+            setSavedDrinks((savedResult.value as any).savedDrinks);
           }
         }
       } catch (err) {
