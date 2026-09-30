@@ -2809,7 +2809,7 @@ async function runTests() {
     const wasPending = freshOrder.status === "PENDING_PAYMENT" && freshOrder.paymentStatus === "unpaid";
 
     // Simulate verified confirmation
-    await paymentService.confirmOrderPayment(freshOrder, {
+    await (paymentService as any).confirmOrderPayment(freshOrder, {
       orderId: freshOrder.id,
       providerOrderId: `cf_${freshOrder.id}`,
       amount: freshOrder.total,
@@ -2887,7 +2887,7 @@ async function runTests() {
     const stockBefore = item?.quantity || 10;
 
     // First confirmation
-    await paymentService.confirmOrderPayment(order, {
+    await (paymentService as any).confirmOrderPayment(order, {
       orderId: order.id,
       providerOrderId: `cf_${order.id}`,
       amount: order.total,
@@ -2901,7 +2901,7 @@ async function runTests() {
     const stockAfterFirst = invAfterFirst.find((i) => i.ingredientId === "cold-brew")?.quantity || 0;
 
     // Second confirmation on same order (idempotency check)
-    await paymentService.confirmOrderPayment(order, {
+    await (paymentService as any).confirmOrderPayment(order, {
       orderId: order.id,
       providerOrderId: `cf_${order.id}`,
       amount: order.total,
